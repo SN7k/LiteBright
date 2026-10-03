@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -45,7 +46,9 @@ public static class SettingsManager
             }
         }
         catch
-        
+        {
+            // Corrupted file -> fall back to defaults silently.
+        }
         _current = new AppSettings();
         return _current;
     }
@@ -61,7 +64,9 @@ public static class SettingsManager
             _current = settings;
         }
         catch
-        
+        {
+            // Non-fatal; settings will revert on next launch.
+        }
     }
 
     public static void Save() => Save(Current);

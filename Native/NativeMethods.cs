@@ -16,6 +16,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpMonitorInfo);
 
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool EnumDisplayDevices(string? lpDevice, uint iDevNum,
+        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+
 
     [DllImport("dxva2.dll", SetLastError = true)]
     public static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(
@@ -81,6 +85,69 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    // ── DWM Window Attributes & Effects (dwmapi) ─────────────────────────────
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute,
+        ref int pvAttribute, int cbAttribute);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS pMarInset);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS
+    {
+        public int cxLeftWidth;
+        public int cxRightWidth;
+        public int cyTopHeight;
+        public int cyBottomHeight;
+    }
+
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE   = 20;
+    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const int DWMWA_BORDER_COLOR             = 34;
+    public const int DWMWA_SYSTEMBACKDROP_TYPE      = 38;
+
+    public const int DWMWCP_DEFAULT    = 0;
+    public const int DWMWCP_DONOTROUND = 1;
+    public const int DWMWCP_ROUND      = 2;
+    public const int DWMWCP_ROUNDSMALL = 3;
+
+    public const int DWMSBT_AUTO            = 0;
+    public const int DWMSBT_NONE            = 1;
+    public const int DWMSBT_MAINWINDOW      = 2; // Mica
+    public const int DWMSBT_TRANSIENTWINDOW = 3; // Acrylic (Taskbar / Flyout)
+    public const int DWMSBT_TABBEDWINDOW    = 4; // Mica Alt
+
+    // ── Windows Composition (Acrylic Blur-Behind) ────────────────────────────
+
+    [DllImport("user32.dll")]
+    public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AccentPolicy
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public int GradientColor;
+        public int AnimationId;
+    }
+
+    public const int WCA_ACCENT_POLICY               = 19;
+    public const int ACCENT_DISABLED                 = 0;
+    public const int ACCENT_ENABLE_GRADIENT          = 1;
+    public const int ACCENT_ENABLE_TRANSPARENTGRADIENT = 2;
+    public const int ACCENT_ENABLE_BLURBEHIND        = 3;
+    public const int ACCENT_ENABLE_ACRYLICBLURBEHIND  = 4;
+
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT
@@ -99,6 +166,21 @@ internal static class NativeMethods
         public uint   dwFlags;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
         public string szDevice;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DISPLAY_DEVICE
+    {
+        public uint cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceString;
+        public uint StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceKey;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

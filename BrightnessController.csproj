@@ -4,6 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>BrightnessController</AssemblyName>
@@ -15,10 +16,17 @@
     <PublishSingleFile>false</PublishSingleFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>public\icon.ico</ApplicationIcon>
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="public\icon.ico" />
+    <EmbeddedResource Include="Localization\*.json" />
+    <None Update="Localization\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <!-- WMI for internal/laptop monitor brightness -->
     <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>

@@ -14,7 +14,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon     _trayIcon       = new();
     private readonly BrightnessPanel _panel;
 
-    private ContextMenuStrip _contextMenu = new();
+    private TrayContextMenu? _trayMenu;
 
     private SettingsForm? _settingsForm;
 
@@ -28,7 +28,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _tooltipResetTimer = new() { Interval = 2000 };
 
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(bool openSettingsOnStart = false)
     {
         _hotkeyManager = new HotkeyManager();
         _hotkeyManager.HotkeyPressed += OnHotkeyPressed;
@@ -55,6 +55,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         SystemEvents_DisplaySettingsChanged(this, EventArgs.Empty);
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged +=
             SystemEvents_DisplaySettingsChanged;
+
+        if (openSettingsOnStart)
+        {
+            OpenSettings();
+        }
     }
 
     public static Icon LoadAppIcon(Size? size = null)
@@ -72,67 +77,37 @@ public sealed class TrayApplicationContext : ApplicationContext
         _trayIcon.Icon            = IconHelper.CreateTrayIcon();
         _trayIcon.Visible         = true;
         _trayIcon.MouseClick      += TrayIcon_MouseClick;
+        _trayIcon.MouseUp         += TrayIcon_MouseUp;
         _trayIcon.MouseDoubleClick+= (_, _) => ShowPanel();
         _trayIcon.MouseMove       += (_, _) =>
         {
             _trayIconCenter      = Cursor.Position;
             _trayIconCenterKnown = true;
         };
-
-        BuildContextMenu();
-        _trayIcon.ContextMenuStrip = _contextMenu;
+        _trayIcon.ContextMenuStrip = null;
     }
 
-    private void BuildContextMenu()
+    private void ShowContextMenu()
     {
-        _contextMenu.Dispose();
-
-        bool light = BrightnessController.Helpers.ThemeHelper.IsLightTheme;
-        Color menuBg  = light ? Color.FromArgb(249, 249, 249) : Color.FromArgb(35, 35, 35);
-        Color menuFg  = light ? Color.FromArgb(20,  20,  20)  : Color.FromArgb(220, 220, 220);
-        Color hover   = light ? BrightnessController.Helpers.ThemeHelper.AccentMenuHover : Color.FromArgb(60, 60, 60);
-        Color border  = light ? Color.FromArgb(200, 200, 205) : Color.FromArgb(60, 60, 60);
-        Color sepCol  = light ? Color.FromArgb(220, 220, 224) : Color.FromArgb(60, 60, 60);
-        Color disabledFg = light ? Color.FromArgb(130, 130, 140) : Color.Gray;
-
-        _contextMenu = new ContextMenuStrip
+        if (_panel.Visible)
         {
-            BackColor = menuBg,
-            ForeColor = menuFg,
-            Renderer  = new ThemedMenuRenderer(menuBg, hover, menuFg, border, sepCol, disabledFg),
-        };
-
-        var monitors = _monitorManager.Monitors;
-
-        if (monitors.Count == 0)
-        {
-            _contextMenu.Items.Add(new ToolStripMenuItem("(No monitors detected)")
-                { Enabled = false });
+            _panel.Hide();
         }
-        else
+
+        if (_trayMenu == null)
         {
-            foreach (var mon in monitors)
-            {
-                var monItem = new ToolStripMenuItem($"☀  {mon.Name}")
+            _trayMenu = new TrayContextMenu(
+                onRefreshDisplays: () =>
                 {
-                    Font    = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                    Enabled = false,
-                };
-                _contextMenu.Items.Add(monItem);
-
-                _contextMenu.Items.Add(new ToolStripSeparator());
-            }
+                    _monitorManager.Refresh();
+                    _panel.RefreshMonitors();
+                },
+                onOpenSettings: () => OpenSettings(),
+                onQuit: () => ExitApplication());
         }
 
-        _contextMenu.Items.Add(new ToolStripMenuItem("⚙  Settings",
-            null, (_, _) => OpenSettings()));
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(new ToolStripMenuItem("✕  Exit",
-            null, (_, _) => ExitApplication()));
-
-        _trayIcon.ContextMenuStrip = _contextMenu;
+        _trayMenu.ShowAt(Cursor.Position);
     }
-
 
     private void TrayIcon_MouseClick(object? sender, MouseEventArgs e)
     {
@@ -143,8 +118,18 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private void TrayIcon_MouseUp(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Right)
+        {
+            _lastTrayClickPosition = Cursor.Position;
+            ShowContextMenu();
+        }
+    }
+
     private void ShowPanel()
     {
+        _trayMenu?.Hide();
         if (_panel.Visible)
         {
             _panel.Hide();
@@ -179,6 +164,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_settingsForm != null && !_settingsForm.IsDisposed)
         {
+            _settingsForm.Activate();
             _settingsForm.Focus();
             return;
         }
@@ -187,10 +173,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         _settingsForm.SettingsSaved += settings =>
         {
             ApplyHotkeys(settings);
-            BuildContextMenu();
+            _trayMenu?.BuildUI();
         };
         _settingsForm.FormClosed += (_, _) => _settingsForm = null;
         _settingsForm.Show();
+        _settingsForm.Activate();
     }
 
     private void ApplyHotkeys(AppSettings settings)
@@ -202,7 +189,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
         _monitorManager.Refresh();
-        BuildContextMenu();
+        _panel.RefreshMonitors();
     }
 
 
@@ -257,6 +244,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         _trayIcon.Visible = false;
         _panel.Hide();
+        _trayMenu?.Close();
         _settingsForm?.Close();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -=
             SystemEvents_DisplaySettingsChanged;
@@ -277,47 +265,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             _tooltipResetTimer.Dispose();
             _hotkeyManager.Dispose();
             _monitorManager.Dispose();
-            _contextMenu.Dispose();
+            _trayMenu?.Close();
         }
         base.Dispose(disposing);
-    }
-
-    private sealed class ThemedMenuRenderer : ToolStripProfessionalRenderer
-    {
-        private readonly Color _bg, _hover, _fg, _disabled;
-
-        public ThemedMenuRenderer(Color bg, Color hover, Color fg, Color border, Color sep, Color disabled)
-            : base(new ThemedColorTable(bg, border, sep))
-        {
-            _bg = bg; _hover = hover; _fg = fg; _disabled = disabled;
-        }
-
-        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
-        {
-            e.TextColor = e.Item.Enabled ? _fg : _disabled;
-            base.OnRenderItemText(e);
-        }
-
-        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
-        {
-            var rect  = new Rectangle(Point.Empty, e.Item.Size);
-            var color = e.Item.Selected && e.Item.Enabled ? _hover : _bg;
-            e.Graphics.FillRectangle(new SolidBrush(color), rect);
-        }
-    }
-
-    private sealed class ThemedColorTable : ProfessionalColorTable
-    {
-        private readonly Color _bg, _border, _sep;
-        public ThemedColorTable(Color bg, Color border, Color sep)
-        { _bg = bg; _border = border; _sep = sep; }
-
-        public override Color MenuBorder                   => _border;
-        public override Color ToolStripDropDownBackground  => _bg;
-        public override Color ImageMarginGradientBegin     => _bg;
-        public override Color ImageMarginGradientMiddle    => _bg;
-        public override Color ImageMarginGradientEnd       => _bg;
-        public override Color SeparatorDark                => _sep;
-        public override Color SeparatorLight               => _sep;
     }
 }

@@ -2,13 +2,21 @@ namespace BrightnessController.Monitors;
 
 public sealed class MonitorInfo : IDisposable
 {
-    public string Name { get; init; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 
-    public string DeviceName { get; init; } = string.Empty;
+    public string DeviceName { get; set; } = string.Empty;
 
-    public int Index { get; init; }
+    public string InternalName { get; set; } = string.Empty;
 
-    public bool IsInternal { get; init; }
+    public int Index { get; set; }
+
+    public bool IsInternal { get; set; }
+
+    public string CommunicationMethod { get; set; } = "None";
+
+    public bool IsCommunicationSupported { get; set; } = false;
+
+    public string HdrStatus { get; set; } = "Unsupported";
 
     public int Brightness    { get; set; } = 100;
     public int MinBrightness { get; set; } = 0;

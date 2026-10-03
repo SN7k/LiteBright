@@ -16,9 +16,11 @@ public sealed class HotkeyManager : IDisposable
 
     public HotkeyManager()
     {
-        _uiContext = SynchronizationContext.Current
-            ?? throw new InvalidOperationException(
-                "HotkeyManager must be created on the UI thread.");
+        if (SynchronizationContext.Current == null)
+        {
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Forms.WindowsFormsSynchronizationContext());
+        }
+        _uiContext = SynchronizationContext.Current!;
 
         _window = new HotkeyWindow();
         _window.HotkeyReceived += OnHotkeyReceived;

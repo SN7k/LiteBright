@@ -19,12 +19,13 @@ public sealed class MonitorManager : IDisposable
 
         var newList = new List<MonitorInfo>();
         bool wmiAvailable = WmiMonitorHelper.IsAvailable();
+        var wmiRecords = WmiMonitorHelper.GetWmiMonitors();
         int index = 0;
 
         NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
             (hMonitor, _, ref _, _) =>
             {
-                var info = BuildMonitorInfo(hMonitor, index, wmiAvailable);
+                var info = BuildMonitorInfo(hMonitor, index, wmiAvailable, wmiRecords);
                 if (info != null)
                 {
                     newList.Add(info);
@@ -32,6 +33,19 @@ public sealed class MonitorManager : IDisposable
                 }
                 return true;
             }, IntPtr.Zero);
+
+        // Sort displays by system display order (Display 1 on top, then Display 2, etc.)
+        newList.Sort((a, b) =>
+        {
+            if (!string.IsNullOrEmpty(a.DeviceName) && !string.IsNullOrEmpty(b.DeviceName))
+                return string.Compare(a.DeviceName, b.DeviceName, StringComparison.OrdinalIgnoreCase);
+            return a.Index.CompareTo(b.Index);
+        });
+
+        for (int i = 0; i < newList.Count; i++)
+        {
+            newList[i].Index = i;
+        }
 
         _monitors = newList;
     }
@@ -78,7 +92,7 @@ public sealed class MonitorManager : IDisposable
     }
 
 
-    private static MonitorInfo? BuildMonitorInfo(IntPtr hMonitor, int index, bool wmiAvailable)
+    private static MonitorInfo? BuildMonitorInfo(IntPtr hMonitor, int index, bool wmiAvailable, List<WmiMonitorRecord> wmiRecords)
     {
         var mi = new NativeMethods.MONITORINFOEX
         {
@@ -86,6 +100,48 @@ public sealed class MonitorManager : IDisposable
         };
         if (!NativeMethods.GetMonitorInfo(hMonitor, ref mi))
             return null;
+
+        string gdiDevice = mi.szDevice.TrimEnd('\0');
+
+        // Retrieve Hardware ID and driver description via EnumDisplayDevices
+        string hwId = string.Empty;
+        string driverDesc = string.Empty;
+        var ddMon = new NativeMethods.DISPLAY_DEVICE { cb = (uint)Marshal.SizeOf<NativeMethods.DISPLAY_DEVICE>() };
+        if (NativeMethods.EnumDisplayDevices(gdiDevice, 0, ref ddMon, 0))
+        {
+            driverDesc = ddMon.DeviceString?.Trim() ?? string.Empty;
+            if (!string.IsNullOrEmpty(ddMon.DeviceID))
+            {
+                // e.g. "MONITOR\ACR0B70\{4d36e96e-e325-11ce-bfc1-08002be10318}\0001"
+                string[] parts = ddMon.DeviceID.Split(new[] { '\\', '#' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 1)
+                {
+                    hwId = parts[1].Trim();
+                }
+            }
+        }
+
+        // Match with WmiMonitorID for real manufacturer model name (e.g. "KA242Y E", "Acer V206HQLB")
+        WmiMonitorRecord? wmiMatch = null;
+        if (!string.IsNullOrEmpty(hwId))
+        {
+            wmiMatch = wmiRecords.FirstOrDefault(r => string.Equals(r.HardwareId, hwId, StringComparison.OrdinalIgnoreCase));
+        }
+        if (wmiMatch == null && index < wmiRecords.Count)
+        {
+            wmiMatch = wmiRecords[index];
+            if (string.IsNullOrEmpty(hwId)) hwId = wmiMatch.HardwareId;
+        }
+
+        string friendlyModelName = string.Empty;
+        if (!string.IsNullOrWhiteSpace(wmiMatch?.FriendlyName))
+            friendlyModelName = wmiMatch.FriendlyName;
+        else if (!string.IsNullOrWhiteSpace(driverDesc) && !driverDesc.Equals("Generic PnP Monitor", StringComparison.OrdinalIgnoreCase))
+            friendlyModelName = driverDesc;
+
+        string internalName = !string.IsNullOrWhiteSpace(hwId)
+            ? hwId
+            : (!string.IsNullOrWhiteSpace(wmiMatch?.HardwareId) ? wmiMatch.HardwareId : gdiDevice);
 
         bool isPrimary = (mi.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0;
         bool isInternal = isPrimary && wmiAvailable;
@@ -95,18 +151,25 @@ public sealed class MonitorManager : IDisposable
             int brightness = WmiMonitorHelper.GetBrightness();
             if (brightness < 0) brightness = 100;
 
+            if (string.IsNullOrEmpty(friendlyModelName))
+                friendlyModelName = "Built-in Display";
+
             return new MonitorInfo
             {
-                Index         = index,
-                Name          = $"Built-in Display ({mi.szDevice.TrimEnd('\0')})",
-                DeviceName    = mi.szDevice.TrimEnd('\0'),
-                IsInternal    = true,
-                Brightness    = brightness,
-                MinBrightness = 0,
-                MaxBrightness = 100,
-                Contrast      = 50,
-                MinContrast   = 0,
-                MaxContrast   = 100,
+                Index                    = index,
+                Name                     = friendlyModelName,
+                DeviceName               = gdiDevice,
+                InternalName             = internalName,
+                IsInternal               = true,
+                CommunicationMethod      = "WMI",
+                IsCommunicationSupported = true,
+                Brightness               = brightness,
+                MinBrightness            = 0,
+                MaxBrightness            = 100,
+                Contrast                 = 50,
+                MinContrast              = 0,
+                MaxContrast              = 100,
+                HdrStatus                = "Unsupported",
             };
         }
         else
@@ -114,43 +177,64 @@ public sealed class MonitorManager : IDisposable
             var physArr = DdcCiHelper.GetPhysicalMonitors(hMonitor);
             if (physArr.Length == 0)
             {
+                if (string.IsNullOrEmpty(friendlyModelName))
+                    friendlyModelName = $"Monitor {index + 1}";
+
                 return new MonitorInfo
                 {
-                    Index         = index,
-                    Name          = $"Monitor {index + 1} ({mi.szDevice.TrimEnd('\0')}) [DDC/CI N/A]",
-                    DeviceName    = mi.szDevice.TrimEnd('\0'),
-                    IsInternal    = false,
-                    Brightness    = 100,
-                    MinBrightness = 0,
-                    MaxBrightness = 100,
+                    Index                    = index,
+                    Name                     = friendlyModelName,
+                    DeviceName               = gdiDevice,
+                    InternalName             = internalName,
+                    IsInternal               = false,
+                    CommunicationMethod      = "None",
+                    IsCommunicationSupported = false,
+                    Brightness               = 0,
+                    MinBrightness            = 0,
+                    MaxBrightness            = 100,
+                    HdrStatus                = "Unsupported",
                 };
             }
 
             IntPtr hPhysical = physArr[0].hPhysicalMonitor;
-            string monName   = $"{physArr[0].szPhysicalMonitorDescription.TrimEnd('\0')} ({mi.szDevice.TrimEnd('\0')})";
+            string physDesc = physArr[0].szPhysicalMonitorDescription.TrimEnd('\0');
 
-            // Brightness
-            uint min = 0, cur = 75, max = 100;
-            DdcCiHelper.TryGetBrightness(hPhysical, out min, out cur, out max);
+            if (string.IsNullOrEmpty(friendlyModelName))
+            {
+                friendlyModelName = !string.IsNullOrEmpty(physDesc) && !physDesc.Equals("Generic PnP Monitor", StringComparison.OrdinalIgnoreCase)
+                    ? physDesc
+                    : (string.IsNullOrEmpty(driverDesc) ? $"Monitor {index + 1}" : driverDesc);
+            }
 
-            // Contrast
+            // Probe Brightness via High-Level DDC/CI (dxva2 GetMonitorBrightness)
+            uint min = 0, cur = 0, max = 0;
+            bool brightOk = DdcCiHelper.TryGetBrightness(hPhysical, out min, out cur, out max);
+
+            // Probe Contrast via High-Level DDC/CI
             uint cMin = 0, cCur = 50, cMax = 100;
-            DdcCiHelper.TryGetContrast(hPhysical, out cMin, out cCur, out cMax);
+            bool contrastOk = DdcCiHelper.TryGetContrast(hPhysical, out cMin, out cCur, out cMax);
+
+            bool commSupported = brightOk && (max > min);
+            string commMethod = commSupported ? "DDC/CI (HL)" : "None";
 
             return new MonitorInfo
             {
-                Index                = index,
-                Name                 = monName,
-                DeviceName           = mi.szDevice.TrimEnd('\0'),
-                IsInternal           = false,
-                PhysicalHandle       = hPhysical,
-                PhysicalMonitorArray = physArr,
-                Brightness           = (int)cur,
-                MinBrightness        = (int)min,
-                MaxBrightness        = (int)max,
-                Contrast             = (int)cCur,
-                MinContrast          = (int)cMin,
-                MaxContrast          = (int)cMax,
+                Index                    = index,
+                Name                     = friendlyModelName,
+                DeviceName               = gdiDevice,
+                InternalName             = internalName,
+                IsInternal               = false,
+                PhysicalHandle           = hPhysical,
+                PhysicalMonitorArray     = physArr,
+                CommunicationMethod      = commMethod,
+                IsCommunicationSupported = commSupported,
+                Brightness               = commSupported ? (int)cur : 0,
+                MinBrightness            = commSupported ? (int)min : 0,
+                MaxBrightness            = commSupported ? (int)max : 100,
+                Contrast                 = contrastOk ? (int)cCur : 50,
+                MinContrast              = contrastOk ? (int)cMin : 0,
+                MaxContrast              = contrastOk ? (int)cMax : 100,
+                HdrStatus                = "Unsupported",
             };
         }
     }

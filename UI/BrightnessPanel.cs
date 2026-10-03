@@ -1,598 +1,829 @@
-﻿using System.ComponentModel;
-using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Shapes;
+using System.Windows.Shell;
+using BrightnessController.Helpers;
 using BrightnessController.Monitors;
+using BrightnessController.Native;
 using BrightnessController.Settings;
+using Brushes = System.Windows.Media.Brushes;
+using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
+using Cursors = System.Windows.Input.Cursors;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using VerticalAlignment = System.Windows.VerticalAlignment;
 
 namespace BrightnessController.UI;
 
-public sealed class BrightnessPanel : Form
+/// <summary>
+/// Seamless Windows 11 flyout matching the native Language & Quick Settings flyouts.
+/// Built with hardware DirectComposition Acrylic blur, Segoe Fluent Icons, and fluent sliders.
+/// Fully synchronized with Windows 11 theme, accent colors, and ColorPrevalence.
+/// </summary>
+public sealed class BrightnessPanel : Window, IDisposable
 {
     private readonly MonitorManager _monitors;
     public event Action? SettingsRequested;
 
-    //  Colors — refreshed by ApplyTheme() each time the panel opens
-    static Color ColForm      = Color.FromArgb(26,  26,  28);
-    static Color ColCard      = Color.FromArgb(34,  34,  37);
-    static Color ColBorderOut = Color.FromArgb(52,  52,  57);
-    static Color ColBorderCrd = Color.FromArgb(44,  44,  48);
-    static Color ColSep       = Color.FromArgb(42,  42,  46);
-    static Color ColBlue      = Color.FromArgb(59,  130, 246);
-    static Color ColTrackBg   = Color.FromArgb(50,  50,  55);
-    static Color ColValBlue   = Color.FromArgb(100, 160, 250);
-    static Color ColHeader    = Color.FromArgb(100, 100, 108);
-    static Color ColMonIcon   = Color.FromArgb(70,  70,  78);
-    static Color ColMonName   = Color.FromArgb(204, 204, 210);
-    static Color ColLblIcon   = Color.FromArgb(130, 130, 140);
-    static Color ColLblText   = Color.FromArgb(210, 210, 215);
-    static Color ColFootTxt   = Color.FromArgb(72,  72,  80);
-    static Color ColGearNorm  = Color.FromArgb(72,  72,  80);
-    static Color ColGearHov   = Color.FromArgb(160, 160, 168);
-    static Color ColGearBgHov = Color.FromArgb(40,  40,  44);
+    public bool Visible => IsVisible;
+    public IntPtr Handle => new WindowInteropHelper(this).EnsureHandle();
 
-    public static void ApplyTheme()
+    // Typography
+    public static string SystemFontName => _systemFontName ??= GetSystemFont();
+    public static string TextFontName   => SystemFontName;
+    private static string? _systemFontName;
+    private static string GetSystemFont()
     {
-        bool light = BrightnessController.Helpers.ThemeHelper.IsLightTheme;
-        // Live Windows accent colour
-        var accent      = BrightnessController.Helpers.ThemeHelper.AccentColor;
-        var accentLight = BrightnessController.Helpers.ThemeHelper.AccentColorLight;
-        var accentDark  = BrightnessController.Helpers.ThemeHelper.AccentColorDark;
-
-        if (light)
+        try
         {
-            ColForm      = Color.FromArgb(245, 245, 247);
-            ColCard      = Color.FromArgb(255, 255, 255);
-            ColBorderOut = Color.FromArgb(210, 210, 215);
-            ColBorderCrd = Color.FromArgb(225, 225, 228);
-            ColSep       = Color.FromArgb(218, 218, 222);
-            ColBlue      = accent;        // slider fill = accent
-            ColTrackBg   = Color.FromArgb(200, 200, 210);
-            ColValBlue   = accentDark;    // value label = slightly darker accent
-            ColHeader    = Color.FromArgb(140, 140, 150);
-            ColMonIcon   = Color.FromArgb(100, 100, 110);
-            ColMonName   = Color.FromArgb(25,  25,  30);
-            ColLblIcon   = Color.FromArgb(100, 100, 110);
-            ColLblText   = Color.FromArgb(40,  40,  48);
-            ColFootTxt   = Color.FromArgb(120, 120, 130);
-            ColGearNorm  = Color.FromArgb(120, 120, 130);
-            ColGearHov   = Color.FromArgb(40,  40,  50);
-            ColGearBgHov = Color.FromArgb(228, 228, 232);
+            var font = new System.Windows.Media.FontFamily("Segoe UI Variable Text");
+            if (font.Source == "Segoe UI Variable Text") return "Segoe UI Variable Text";
         }
-        else
-        {
-            ColForm      = Color.FromArgb(26,  26,  28);
-            ColCard      = Color.FromArgb(34,  34,  37);
-            ColBorderOut = Color.FromArgb(52,  52,  57);
-            ColBorderCrd = Color.FromArgb(44,  44,  48);
-            ColSep       = Color.FromArgb(42,  42,  46);
-            ColBlue      = accent;        // slider fill = accent
-            ColTrackBg   = Color.FromArgb(50,  50,  55);
-            ColValBlue   = accentLight;   // value label = lighter accent
-            ColHeader    = Color.FromArgb(100, 100, 108);
-            ColMonIcon   = Color.FromArgb(70,  70,  78);
-            ColMonName   = Color.FromArgb(204, 204, 210);
-            ColLblIcon   = Color.FromArgb(130, 130, 140);
-            ColLblText   = Color.FromArgb(210, 210, 215);
-            ColFootTxt   = Color.FromArgb(72,  72,  80);
-            ColGearNorm  = Color.FromArgb(72,  72,  80);
-            ColGearHov   = Color.FromArgb(160, 160, 168);
-            ColGearBgHov = Color.FromArgb(40,  40,  44);
-        }
+        catch { }
+        return "Segoe UI";
     }
 
-    //  Layout 
-    const int W           = 360;   // total width
-    const int Pad         = 20;    // outer horizontal & vertical padding
-    const int Rout        = 12;    // outer form corner radius
-    const int Rcard       = 8;     // card corner radius
-    const int CrdPad      = 20;    // card inner padding = p-5
-    // Header
-    const int HdrH        = 16;
-    const int HdrMB       = 20;    // mb-5
-    // Card – name row (p-5=20 card padding, pb-3=12, mb-4=16)
-    const int NameH       = 20;    // icon+name row height  (text-[12px], ~20px line)
-    const int NamePB      = 12;    // pb-3 = 12px below name before sep
-    const int SepH        = 1;
-    const int SepMT       = 16;    // mb-4 = 16px gap after sep before first field
-    // Slider field (mb-1.5=6, h-4=16)
-    const int LblH        = 24;    // label row
-    const int LblMB       = 6;     // mb-1.5 = 6px between label and track
-    const int TrkH        = 16;    // h-4 = 16px track container
-    const int FieldH      = 46;    // LblH+LblMB+TrkH = 24+6+16
-    const int SpaceY      = 16;    // space-y-4 between slider fields
-    const int CardBotPad  = 20;    // p-5 = 20px bottom card padding
-    // Footer
-    const int CardGap     = 4;     // space-y-1 = 4px between cards
-    const int FootMT      = 20;    // mt-5
-    const int FootSepH    = 1;
-    const int FootPT      = 16;    // pt-4 = 16px
-    const int FootRowH    = 26;
-    const int BotPad      = 20;    // outer bottom = p-5
+    public static string IconFontName => _iconFontName ??= GetIconFont();
+    private static string? _iconFontName;
+    private static string GetIconFont()
+    {
+        try
+        {
+            var font = new System.Windows.Media.FontFamily("Segoe Fluent Icons");
+            if (font.Source == "Segoe Fluent Icons") return "Segoe Fluent Icons";
+        }
+        catch { }
+        return "Segoe MDL2 Assets";
+    }
+
+    // Win32 Interop for robust positioning and Z-Order
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int x; public int y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_NOMOVE     = 0x0002;
+    private const uint SWP_NOSIZE     = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+
+    // Track active monitor layout to recalculate position if size changes dynamically
+    private RECT _activeMonitorWork;
+    private RECT _activeMonitorBounds;
+    private int _detectedTaskbarTop;
+    private double _activeScaleX = 1.0;
+    private double _activeScaleY = 1.0;
+    private int _lastAnchorX;
 
     public BrightnessPanel(MonitorManager monitors)
     {
-        _monitors       = monitors;
-        FormBorderStyle = FormBorderStyle.None;
-        StartPosition   = FormStartPosition.Manual;
-        ShowInTaskbar   = false;
-        TopMost         = true;
-        Width           = W;
-        Height          = 10;
-        BackColor       = ColForm;
-        Deactivate     += (_, _) => Hide();
-        SetStyle(ControlStyles.AllPaintingInWmPaint |
-                 ControlStyles.OptimizedDoubleBuffer, true);
+        _monitors = monitors;
+
+        WindowStyle           = WindowStyle.None;
+        ResizeMode            = ResizeMode.NoResize;
+        ShowInTaskbar         = false;
+        Topmost               = true;
+        SizeToContent         = SizeToContent.Height;
+        Width                 = 330;
+        Background            = Brushes.Transparent;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+
+        WindowChrome.SetWindowChrome(this, new WindowChrome
+        {
+            CaptionHeight         = 0,
+            CornerRadius          = new CornerRadius(0),
+            GlassFrameThickness   = new Thickness(-1),
+            UseAeroCaptionButtons = false
+        });
+
+        Deactivated += (_, _) => Hide();
+
+        // Reposition dynamically if content height changes to guarantee it stays strictly above taskbar
+        SizeChanged += (_, _) =>
+        {
+            if (IsVisible && _detectedTaskbarTop > 0 && ActualHeight > 0)
+            {
+                RepositionWindow();
+            }
+        };
+
+        // Listen for live Windows theme changes
+        ThemeHelper.ThemeChanged += OnThemeChanged;
     }
 
-    public void ShowAtTray(Point anchor)
+    public void Dispose()
     {
-        ApplyTheme();
-        BackColor = ColForm;
+        ThemeHelper.ThemeChanged -= OnThemeChanged;
+        Close();
+    }
+
+    public void BeginInvoke(Action action) => Dispatcher.BeginInvoke(action);
+
+    private void OnThemeChanged()
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            ApplyDwmAttributes();
+            if (IsVisible)
+            {
+                BuildUI();
+            }
+        });
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget != null)
+        {
+            source.CompositionTarget.BackgroundColor = System.Windows.Media.Colors.Transparent;
+        }
+
+        ApplyDwmAttributes();
+        source?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_SETTINGCHANGE = 0x001A;
+        const int WM_THEMECHANGED   = 0x031A;
+        const int WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
+
+        if (msg == WM_SETTINGCHANGE || msg == WM_THEMECHANGED || msg == WM_DWMCOLORIZATIONCOLORCHANGED)
+        {
+            OnThemeChanged();
+        }
+        return IntPtr.Zero;
+    }
+
+    private void ApplyDwmAttributes()
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).EnsureHandle();
+        bool isDark = !ThemeHelper.IsLightTheme;
+        int dark = isDark ? 1 : 0;
+        NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+
+        int corner = NativeMethods.DWMWCP_ROUND;
+        NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+
+        // Windows 11 DirectComposition Acrylic
+        int backdrop = NativeMethods.DWMSBT_TRANSIENTWINDOW;
+        NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+
+        // Extend glass frame into the entire client area
+        var margins = new NativeMethods.MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
+        NativeMethods.DwmExtendFrameIntoClientArea(hwnd, ref margins);
+
+        // Always apply DWM Acrylic BlurBehind with exact alpha/color gradient
+        // This guarantees deep frosted-glass blur and wallpaper bleed-through across all Windows 11 builds
+        try
+        {
+            var palette = ThemeHelper.GetFlyoutPalette();
+            int gradient = (palette.background.A << 24) |
+                           (palette.background.B << 16) |
+                           (palette.background.G << 8)  |
+                           palette.background.R;
+
+            var accent = new NativeMethods.AccentPolicy
+            {
+                AccentState   = NativeMethods.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                GradientColor = gradient,
+                AccentFlags   = 2
+            };
+            int accentStructSize = Marshal.SizeOf(accent);
+            IntPtr accentPtr = Marshal.AllocHGlobal(accentStructSize);
+            Marshal.StructureToPtr(accent, accentPtr, false);
+
+            var data = new NativeMethods.WindowCompositionAttributeData
+            {
+                Attribute  = NativeMethods.WCA_ACCENT_POLICY,
+                SizeOfData = accentStructSize,
+                Data       = accentPtr
+            };
+            NativeMethods.SetWindowCompositionAttribute(hwnd, ref data);
+            Marshal.FreeHGlobal(accentPtr);
+        }
+        catch { }
+    }
+
+    public void RefreshMonitors()
+    {
+        if (IsVisible)
+        {
+            BuildUI();
+        }
+    }
+
+    public void ShowAtTray(System.Drawing.Point anchor)
+    {
         BuildUI();
-        PositionAtTray(anchor);
+        ApplyDwmAttributes();
+
+        IntPtr hwnd = new WindowInteropHelper(this).EnsureHandle();
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget != null)
+        {
+            source.CompositionTarget.BackgroundColor = System.Windows.Media.Colors.Transparent;
+        }
+
+        _lastAnchorX = anchor.X;
+
+        // 1. Get exact Monitor Work Area & Bounds via Win32
+        POINT pt = new POINT { x = anchor.X, y = anchor.Y };
+        IntPtr hMonitor = MonitorFromPoint(pt, 2 /* MONITOR_DEFAULTTONEAREST */);
+        MONITORINFO mi = new MONITORINFO();
+        mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+        GetMonitorInfo(hMonitor, ref mi);
+
+        _activeMonitorWork   = mi.rcWork;
+        _activeMonitorBounds = mi.rcMonitor;
+
+        // 2. Query Monitor DPI
+        _activeScaleX = 1.0;
+        _activeScaleY = 1.0;
+        try
+        {
+            if (GetDpiForMonitor(hMonitor, 0 /* MDT_EFFECTIVE_DPI */, out uint dpiX, out uint dpiY) == 0)
+            {
+                _activeScaleX = dpiX / 96.0;
+                _activeScaleY = dpiY / 96.0;
+            }
+        }
+        catch
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            _activeScaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+            _activeScaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+        }
+
+        // 3. Detect Taskbar Top Edge
+        int taskbarTop = mi.rcWork.Bottom;
+
+        IntPtr hTaskbar = FindWindow("Shell_TrayWnd", null);
+        if (hTaskbar != IntPtr.Zero && GetWindowRect(hTaskbar, out RECT tbRect))
+        {
+            if (tbRect.Top > mi.rcMonitor.Top && tbRect.Top < mi.rcMonitor.Bottom)
+            {
+                taskbarTop = Math.Min(taskbarTop, tbRect.Top);
+            }
+        }
+
+        int standardTbPx = (int)Math.Round(48 * _activeScaleY);
+        if (taskbarTop >= mi.rcMonitor.Bottom - 4)
+        {
+            taskbarTop = mi.rcMonitor.Bottom - standardTbPx;
+        }
+
+        _detectedTaskbarTop = taskbarTop;
+
+        // 4. Measure content size
+        UpdateLayout();
+        Measure(new System.Windows.Size(Width, double.PositiveInfinity));
+        double dipHeight = DesiredSize.Height > 50 ? DesiredSize.Height : (ActualHeight > 50 ? ActualHeight : 240);
+
+        int physWidth  = (int)Math.Round(Width * _activeScaleX);
+        int physHeight = (int)Math.Round(dipHeight * _activeScaleY);
+
+        // 5. Calculate position: 12 DIPs (scaled) strictly ABOVE the taskbar top
+        int gapY = (int)Math.Round(12 * _activeScaleY);
+        int gapX = (int)Math.Round(12 * _activeScaleX);
+
+        int targetY = _detectedTaskbarTop - physHeight - gapY;
+        if (targetY < mi.rcWork.Top + gapY)
+            targetY = mi.rcWork.Top + gapY;
+
+        int targetX = anchor.X - physWidth / 2;
+        if (targetX + physWidth > mi.rcWork.Right - gapX)
+            targetX = mi.rcWork.Right - physWidth - gapX;
+        if (targetX < mi.rcWork.Left + gapX)
+            targetX = mi.rcWork.Left + gapX;
+
+        // Synchronize WPF coordinates
+        Left = targetX / _activeScaleX;
+        Top  = targetY / _activeScaleY;
+
         Show();
         Activate();
+
+        // 6. Set HWND position and topmost Z-order via Win32 directly in physical pixels
+        SetWindowPos(hwnd, HWND_TOPMOST, targetX, targetY, physWidth, physHeight, SWP_SHOWWINDOW);
+        SetForegroundWindow(hwnd);
     }
 
-    //  Build UI 
+    private void RepositionWindow()
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).EnsureHandle();
+        double currentDipHeight = ActualHeight > 50 ? ActualHeight : DesiredSize.Height;
+        if (currentDipHeight <= 0) return;
+
+        int physWidth  = (int)Math.Round(Width * _activeScaleX);
+        int physHeight = (int)Math.Round(currentDipHeight * _activeScaleY);
+
+        int gapY = (int)Math.Round(12 * _activeScaleY);
+        int gapX = (int)Math.Round(12 * _activeScaleX);
+
+        int targetY = _detectedTaskbarTop - physHeight - gapY;
+        if (targetY < _activeMonitorWork.Top + gapY)
+            targetY = _activeMonitorWork.Top + gapY;
+
+        int targetX = _lastAnchorX - physWidth / 2;
+        if (targetX + physWidth > _activeMonitorWork.Right - gapX)
+            targetX = _activeMonitorWork.Right - physWidth - gapX;
+        if (targetX < _activeMonitorWork.Left + gapX)
+            targetX = _activeMonitorWork.Left + gapX;
+
+        Left = targetX / _activeScaleX;
+        Top  = targetY / _activeScaleY;
+
+        SetWindowPos(hwnd, HWND_TOPMOST, targetX, targetY, physWidth, physHeight, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    }
+
     private void BuildUI()
     {
-        Controls.Clear();
+        bool isDark = !ThemeHelper.IsLightTheme;
+        var palette = ThemeHelper.GetFlyoutPalette();
 
-        int cw = W - Pad * 2;   // inner content width
-        int y  = Pad;
+        var bgCol = Color.FromArgb(palette.background.A, palette.background.R, palette.background.G, palette.background.B);
+        var borderCol = Color.FromArgb(palette.border.A, palette.border.R, palette.border.G, palette.border.B);
+        var sliderFillCol = Color.FromArgb(palette.sliderFill.A, palette.sliderFill.R, palette.sliderFill.G, palette.sliderFill.B);
 
-        //  Header "LITEBRIGHT" 
-        Controls.Add(Lbl("LITEBRIGHT",
-            new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ColHeader, Pad + 4, y, cw - 4, HdrH,
-            ContentAlignment.MiddleLeft, ColForm));
-        y += HdrH + HdrMB;
+        var primaryFg = (isDark || palette.isAccentThemed)
+            ? new SolidColorBrush(Color.FromArgb(255, 255, 255, 255))
+            : new SolidColorBrush(Color.FromArgb(255, 24, 24, 24));
 
-        //  Cards 
+        var secondaryFg = (isDark || palette.isAccentThemed)
+            ? new SolidColorBrush(Color.FromArgb(215, 230, 230, 235))
+            : new SolidColorBrush(Color.FromArgb(215, 90, 90, 95));
+
+        var iconFg = (isDark || palette.isAccentThemed)
+            ? new SolidColorBrush(Color.FromArgb(240, 245, 245, 250))
+            : new SolidColorBrush(Color.FromArgb(235, 75, 75, 80));
+
+        // Single continuous Acrylic sheet matching Windows 11 Language & Quick Settings flyouts
+        // Translucent with wallpaper blur bleed-through
+        var root = new Border
+        {
+            CornerRadius    = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            BorderBrush     = new SolidColorBrush(borderCol),
+            Background      = new SolidColorBrush(bgCol),
+            Padding         = new Thickness(16, 14, 16, 12)
+        };
+
+        var mainStack = new StackPanel();
+
+        // Monitors list
         bool showContrast = SettingsManager.Current.EnableContrastSlider;
         var mons = _monitors.Monitors;
+
         for (int i = 0; i < mons.Count; i++)
         {
             var mon = mons[i];
-            var m   = mon;
+            var m = mon;
             bool isLast = i == mons.Count - 1;
 
-            int contentH = NameH + NamePB + SepH + SepMT
-                         + FieldH
-                         + (showContrast ? SpaceY + FieldH : 0)
-                         + CardBotPad;
-            int cardH    = CrdPad + contentH;
-            int cx       = Pad;
+            var monSection = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
-            var card = new CardCtl(cardH, Rcard) { Left = cx, Top = y, Width = cw, Height = cardH };
+            // Monitor Name Header
+            var headerDock = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var monIcon = new TextBlock
+            {
+                Text              = "\uE7F4", // Monitor display glyph (Segoe Fluent Icons)
+                FontFamily        = new System.Windows.Media.FontFamily(IconFontName),
+                FontSize          = 14,
+                Foreground        = iconFg,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(0, 0, 8, 0)
+            };
+            DockPanel.SetDock(monIcon, Dock.Left);
+            headerDock.Children.Add(monIcon);
 
-            int cy = CrdPad;
-            int iw = cw - CrdPad * 2;  // inner content width (card p-5 on each side)
+            var monTitle = new TextBlock
+            {
+                Text              = CleanName(mon.Name),
+                FontFamily        = new System.Windows.Media.FontFamily(TextFontName),
+                FontSize          = 13,
+                FontWeight        = FontWeights.SemiBold,
+                Foreground        = primaryFg,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming      = TextTrimming.CharacterEllipsis
+            };
+            headerDock.Children.Add(monTitle);
+            monSection.Children.Add(headerDock);
 
-            // Monitor icon (custom drawn) + name
-            var iconLbl = new MonitorIconCtl
-            { Left = CrdPad, Top = cy, Width = 18, Height = NameH };
-            card.Controls.Add(iconLbl);
+            // Brightness Row (matching native Windows 11 Quick Settings slider)
+            var brightDock = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
+            var sunIcon = new TextBlock
+            {
+                Text              = "\uE706", // Brightness sun glyph (Segoe Fluent Icons)
+                FontFamily        = new System.Windows.Media.FontFamily(IconFontName),
+                FontSize          = 14,
+                Foreground        = iconFg,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin            = new Thickness(0, 0, 10, 0)
+            };
+            DockPanel.SetDock(sunIcon, Dock.Left);
+            brightDock.Children.Add(sunIcon);
 
-            card.Controls.Add(Lbl(CleanName(mon.Name),
-                new Font("Segoe UI", 11f, FontStyle.Bold),
-                ColMonName, CrdPad + 20, cy, iw - 20, NameH,
-                ContentAlignment.MiddleLeft, Color.Transparent));
-            cy += NameH + NamePB;
+            var valText = new TextBlock
+            {
+                Text              = $"{mon.BrightnessPercent}%",
+                FontFamily        = new System.Windows.Media.FontFamily(TextFontName),
+                FontSize          = 12,
+                FontWeight        = FontWeights.SemiBold,
+                Foreground        = primaryFg,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment     = TextAlignment.Right,
+                Width             = 38,
+                Margin            = new Thickness(10, 0, 0, 0)
+            };
+            DockPanel.SetDock(valText, Dock.Right);
+            brightDock.Children.Add(valText);
 
-            // Separator
-            card.Controls.Add(new Panel { Left = CrdPad, Top = cy, Width = iw, Height = SepH, BackColor = ColSep });
-            cy += SepH + SepMT;
+            var bSlider = new FluentSlider(mon.BrightnessPercent, sliderFillCol, palette.isAccentThemed, isDark, pct =>
+            {
+                valText.Text = $"{pct}%";
+                _monitors.SetBrightness(m, pct);
+            });
 
-            // Brightness field — Left=CrdPad, width=iw
-            var bf = MakeField(cy, iw, "BRIGHTNESS", SliderIcon.Sun,
-                mon.BrightnessPercent, pct => _monitors.SetBrightness(m, pct));
-            bf.Left = CrdPad;
-            card.Controls.Add(bf);
-            cy += FieldH;
+            if (!mon.IsCommunicationSupported)
+            {
+                valText.Visibility = Visibility.Collapsed;
+                bSlider.IsEnabled = false;
+                bSlider.Opacity = 0.4;
+            }
 
-            // Contrast field — only when enabled in settings
+            brightDock.Children.Add(bSlider);
+            monSection.Children.Add(brightDock);
+
+            // Contrast Row (if enabled)
             if (showContrast)
             {
-                cy += SpaceY;
-                var cf = MakeField(cy, iw, "CONTRAST", SliderIcon.Contrast,
-                    mon.IsInternal ? 50 : mon.ContrastPercent,
-                    pct => { if (!m.IsInternal) _monitors.SetContrast(m, pct); });
-                cf.Left = CrdPad;
-                card.Controls.Add(cf);
+                var contrastDock = new DockPanel { Margin = new Thickness(0, 6, 0, 3) };
+                var cIcon = new TextBlock
+                {
+                    Text              = "\uE793", // Contrast glyph
+                    FontFamily        = new System.Windows.Media.FontFamily(IconFontName),
+                    FontSize          = 14,
+                    Foreground        = iconFg,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin            = new Thickness(0, 0, 10, 0)
+                };
+                DockPanel.SetDock(cIcon, Dock.Left);
+                contrastDock.Children.Add(cIcon);
+
+                int cInit = mon.IsInternal ? 50 : mon.ContrastPercent;
+                var cValText = new TextBlock
+                {
+                    Text              = $"{cInit}%",
+                    FontFamily        = new System.Windows.Media.FontFamily(TextFontName),
+                    FontSize          = 12,
+                    FontWeight        = FontWeights.SemiBold,
+                    Foreground        = primaryFg,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextAlignment     = TextAlignment.Right,
+                    Width             = 38,
+                    Margin            = new Thickness(10, 0, 0, 0)
+                };
+                DockPanel.SetDock(cValText, Dock.Right);
+                contrastDock.Children.Add(cValText);
+
+                var cSlider = new FluentSlider(cInit, sliderFillCol, palette.isAccentThemed, isDark, pct =>
+                {
+                    cValText.Text = $"{pct}%";
+                    if (!m.IsInternal) _monitors.SetContrast(m, pct);
+                });
+                contrastDock.Children.Add(cSlider);
+                monSection.Children.Add(contrastDock);
             }
 
-            Controls.Add(card);
-            y += cardH + (isLast ? 0 : CardGap);
+            mainStack.Children.Add(monSection);
+
+            // Subtle divider between multiple monitors
+            if (!isLast)
+            {
+                var divider = new Border
+                {
+                    Height     = 1,
+                    Background = palette.isAccentThemed
+                        ? new SolidColorBrush(Color.FromArgb(32, 255, 255, 255))
+                        : (isDark
+                            ? new SolidColorBrush(Color.FromArgb(18, 255, 255, 255))
+                            : new SolidColorBrush(Color.FromArgb(14, 0, 0, 0))),
+                    Margin     = new Thickness(0, 4, 0, 10)
+                };
+                mainStack.Children.Add(divider);
+            }
         }
 
-        //  Footer 
-        y += FootMT;
-        Controls.Add(new Panel { Left = Pad, Top = y, Width = cw, Height = FootSepH, BackColor = ColSep });
-        y += FootSepH + FootPT;
-
-        Controls.Add(Lbl("PARAMETERS",
-            new Font("Segoe UI", 8f, FontStyle.Bold),
-            ColFootTxt, Pad + 4, y, cw - 38, FootRowH,
-            ContentAlignment.MiddleLeft, ColForm));
-
-        var gear = new GearCtl { Left = Pad + cw - 30, Top = y + (FootRowH - 26) / 2 };
-        gear.Click += (_, _) => { Hide(); SettingsRequested?.Invoke(); };
-        Controls.Add(gear);
-
-        y += FootRowH + BotPad;
-        Height = y;
-        Region = MakeRgn(W, Height, Rout);
-    }
-
-    //  Form border — drawn AFTER all children via WndProc so it's never covered 
-    private const int WM_PAINT = 0x000F;
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        // Background only — border is drawn in WndProc after children
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var fill = new SolidBrush(ColForm);
-        using var path = RndPath(0, 0, W, Height, Rout);
-        g.FillPath(fill, path);
-    }
-
-    protected override void WndProc(ref Message m)
-    {
-        base.WndProc(ref m);
-        if (m.Msg == WM_PAINT)
+        // Footer divider
+        var footDivider = new Border
         {
-            using var g = Graphics.FromHwnd(Handle);
-            g.SmoothingMode    = SmoothingMode.AntiAlias;
-            g.PixelOffsetMode  = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-            using var pen  = new Pen(ColBorderOut, 1.5f);
-            using var path = RndPath(1, 1, W - 2, Height - 2, Rout - 1);
-            g.DrawPath(pen, path);
-        }
-    }
+            Height     = 1,
+            Background = palette.isAccentThemed
+                ? new SolidColorBrush(Color.FromArgb(32, 255, 255, 255))
+                : (isDark
+                    ? new SolidColorBrush(Color.FromArgb(18, 255, 255, 255))
+                    : new SolidColorBrush(Color.FromArgb(14, 0, 0, 0))),
+            Margin     = new Thickness(0, 4, 0, 8)
+        };
+        mainStack.Children.Add(footDivider);
 
-    //  Slider field factory 
-    enum SliderIcon { Sun, Contrast }
+        // Footer: LiteBright brand name and Settings button with hover pill
+        var footerGrid = new Grid();
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-    static Panel MakeField(int y, int w, string label, SliderIcon icon, int init, Action<int> onChange)
-    {
-        // w = inner card width (card width minus 2*CrdPad)
-        var p = new TransCtl { Left = 0, Top = y, Width = w, Height = FieldH };
-
-        // icon — 12px lucide-style, opacity-60, gap-2(8px) before label
-        p.Controls.Add(new SldIconCtl(icon) { Left = 0, Top = 0, Width = 16, Height = LblH });
-
-        // label — px-0.5 ≈ 2px, so label starts at 16+8=24... but icon is 16, gap=4 visual
-        p.Controls.Add(Lbl(label,
-            new Font("Segoe UI", 9f, FontStyle.Bold),
-            ColLblText, 20, 0, w - 20 - 42, LblH,
-            ContentAlignment.MiddleLeft, Color.Transparent));
-
-        // value — right-aligned, tabular, blue
-        var val = Lbl($"{init}",
-            new Font("Segoe UI", 12f, FontStyle.Bold),
-            ColValBlue, w - 40, 0, 40, LblH,
-            ContentAlignment.MiddleRight, Color.Transparent);
-
-        // slider — full inner width, 2px track
-        var sl = new Track { Left = 0, Top = LblH + LblMB, Width = w, Height = TrkH, Value = init };
-        sl.ValueChanged += v => { val.Text = $"{v}"; onChange(v); };
-
-        p.Controls.Add(val);
-        p.Controls.Add(sl);
-        return p;
-    }
-
-    //  Label helper 
-    static Label Lbl(string text, Font f, Color fg, int x, int y, int w, int h,
-        ContentAlignment align, Color bg)
-        => new Label
+        var brandText = new TextBlock
         {
-            Text = text, Font = f, ForeColor = fg,
-            AutoSize = false, Left = x, Top = y, Width = w, Height = h,
-            TextAlign = align, BackColor = bg,
+            Text              = "LiteBright",
+            FontFamily        = new System.Windows.Media.FontFamily(TextFontName),
+            FontSize          = 11.5,
+            FontWeight        = FontWeights.SemiBold,
+            Foreground        = secondaryFg,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(brandText, 0);
+        footerGrid.Children.Add(brandText);
+
+        var gearBtn = new Border
+        {
+            Width             = 28,
+            Height            = 28,
+            CornerRadius      = new CornerRadius(5),
+            Background        = Brushes.Transparent,
+            Cursor            = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip           = LocalizationManager.T("GENERIC_SETTINGS", "Settings")
         };
 
-    //  Positioning 
-    private void PositionAtTray(Point anchor)
-    {
-        var wa = Screen.FromPoint(anchor).WorkingArea;
-        int x  = Math.Clamp(anchor.X - Width / 2,  wa.Left + 8, wa.Right  - Width  - 8);
-        int y  = anchor.Y >= wa.Bottom - 2 ? wa.Bottom - Height - 10
-               : anchor.Y <= wa.Top    + 2 ? wa.Top    + 10
-               : anchor.Y - Height;
-        y = Math.Clamp(y, wa.Top + 8, wa.Bottom - Height - 8);
-        Location = new Point(x, y);
+        var gearIcon = new TextBlock
+        {
+            Text                = "\uE713", // Settings gear glyph (Segoe Fluent Icons)
+            FontFamily          = new System.Windows.Media.FontFamily(IconFontName),
+            FontSize            = 13,
+            Foreground          = secondaryFg,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment   = VerticalAlignment.Center
+        };
+        gearBtn.Child = gearIcon;
+
+        gearBtn.MouseEnter += (_, _) =>
+        {
+            gearBtn.Background = palette.isAccentThemed
+                ? new SolidColorBrush(Color.FromArgb(45, 255, 255, 255))
+                : (isDark
+                    ? new SolidColorBrush(Color.FromArgb(32, 255, 255, 255))
+                    : new SolidColorBrush(Color.FromArgb(18, 0, 0, 0)));
+            gearIcon.Foreground = primaryFg;
+        };
+
+        gearBtn.MouseLeave += (_, _) =>
+        {
+            gearBtn.Background = Brushes.Transparent;
+            gearIcon.Foreground = secondaryFg;
+        };
+
+        gearBtn.MouseLeftButtonUp += (_, _) =>
+        {
+            Hide();
+            SettingsRequested?.Invoke();
+        };
+
+        Grid.SetColumn(gearBtn, 1);
+        footerGrid.Children.Add(gearBtn);
+
+        mainStack.Children.Add(footerGrid);
+        root.Child = mainStack;
+        Content = root;
     }
 
-    static string CleanName(string s) { int p = s.IndexOf('('); return p > 0 ? s[..p].Trim() : s.Trim(); }
-
-    static Region MakeRgn(int w, int h, int r) => new Region(RndPath(0, 0, w, h, r));
-
-    static GraphicsPath RndPath(int x, int y, int w, int h, int r)
+    private static string CleanName(string s)
     {
-        var p = new GraphicsPath();
-        if (r <= 0) { p.AddRectangle(new Rectangle(x, y, w, h)); return p; }
-        p.AddArc(x,         y,         r*2, r*2, 180, 90);
-        p.AddArc(x+w-r*2,   y,         r*2, r*2, 270, 90);
-        p.AddArc(x+w-r*2,   y+h-r*2,   r*2, r*2,   0, 90);
-        p.AddArc(x,         y+h-r*2,   r*2, r*2,  90, 90);
-        p.CloseFigure();
-        return p;
+        int p = s.IndexOf('(');
+        return p > 0 ? s[..p].Trim() : s.Trim();
     }
 
-    // 
-    // CardCtl — rounded card with solid bg + border
-    // 
-    sealed class CardCtl : Panel
+    /// <summary>
+    /// Native Windows 11 Fluent slider matching the Quick Settings volume/brightness control:
+    /// 4px slender track, 18px circular thumb with dark border and soft drop shadow.
+    /// </summary>
+    internal sealed class FluentSlider : Canvas
     {
-        readonly int _r;
-        public CardCtl(int h, int r)
+        private int _value;
+        private bool _isDragging;
+        private readonly Action<int> _onValueChanged;
+        private readonly Border _trackBg;
+        private readonly Border _trackFill;
+        private readonly Border _thumb;
+
+        const int TrackH       = 4;  // Windows 11 slider track is precisely 4px
+        const double ThumbSize = 18; // Windows 11 circular thumb is 18px
+        const double HalfThumb = ThumbSize / 2.0;
+
+        public int Value
         {
-            _r = r; BackColor = ColCard;
-            SetStyle(ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.ResizeRedraw, true);
-        }
-        protected override void OnResize(EventArgs e)
-        { base.OnResize(e); Region = new Region(RndPath(0, 0, Width, Height, _r)); }
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            // Paint parent (form) bg into corners so no dark pixels show at antialiased edge
-            e.Graphics.Clear(ColForm);
-        }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var fb = new SolidBrush(ColCard);
-            using var fp = RndPath(0, 0, Width, Height, _r);
-            g.FillPath(fb, fp);
-            // Border drawn in WndProc after children
-        }
-        protected override void WndProc(ref Message m)
-        {
-            base.WndProc(ref m);
-            if (m.Msg == 0x000F) // WM_PAINT
+            get => _value;
+            set
             {
-                using var g   = Graphics.FromHwnd(Handle);
-                g.SmoothingMode   = SmoothingMode.AntiAlias;
-                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                using var pen = new Pen(ColBorderCrd, 1.5f);
-                using var bp  = RndPath(1, 1, Width - 2, Height - 2, _r - 1);
-                g.DrawPath(pen, bp);
+                int clamped = Math.Clamp(value, 0, 100);
+                if (clamped == _value) return;
+                _value = clamped;
+                UpdateVisuals();
             }
         }
-    }
 
-    // 
-    // TransCtl — transparent container
-    // 
-    sealed class TransCtl : Panel
-    {
-        public TransCtl()
+        public FluentSlider(int initialValue, Color fillColor, bool isAccentThemed, bool isDark, Action<int> onValueChanged)
         {
-            SetStyle(ControlStyles.SupportsTransparentBackColor |
-                     ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.OptimizedDoubleBuffer, true);
-            BackColor = Color.Transparent;
-        }
-    }
+            _value = Math.Clamp(initialValue, 0, 100);
+            _onValueChanged = onValueChanged;
+            Height = 24; // Compact, perfectly centered hit-target
+            Cursor = Cursors.Hand;
+            ClipToBounds = false;
 
-    // 
-    // MonitorIconCtl — draws a simple Lucide-style monitor at small size
-    // 
-    sealed class MonitorIconCtl : Control
-    {
-        public MonitorIconCtl()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-        }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            // Center the icon
-            int ox = (Width  - 13) / 2;
-            int oy = (Height - 11) / 2;
-            using var p = new Pen(ColMonIcon, 1.3f);
-            // Screen rectangle
-            g.DrawRectangle(p, ox, oy, 13, 9);
-            // Stand line
-            g.DrawLine(p, ox + 4, oy + 9, ox + 9, oy + 9);  // base
-            g.DrawLine(p, ox + 6, oy + 9, ox + 7, oy + 11); // stem
-            g.DrawLine(p, ox + 4, oy + 11, ox + 9, oy + 11);// foot
-        }
-    }
+            Brush fillBrush;
+            Brush trackBgBrush;
+            Brush thumbBorderBrush;
 
-    // 
-    // SldIconCtl — draws tiny  or  icon
-    // 
-    sealed class SldIconCtl : Control
-    {
-        readonly SliderIcon _kind;
-        public SldIconCtl(SliderIcon kind)
-        {
-            _kind = kind;
-            SetStyle(ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-        }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var p  = new Pen(ColLblIcon, 1.2f);
-            using var br = new SolidBrush(ColLblIcon);
-            int cx = Width  / 2, cy = Height / 2;
-
-            if (_kind == SliderIcon.Sun)
+            if (isAccentThemed)
             {
-                // small sun: circle + 8 rays
-                g.DrawEllipse(p, cx-3, cy-3, 6, 6);
-                for (int a = 0; a < 360; a += 45)
-                {
-                    double rad = a * Math.PI / 180;
-                    float x1=(float)(cx+Math.Cos(rad)*4.5f), y1=(float)(cy+Math.Sin(rad)*4.5f);
-                    float x2=(float)(cx+Math.Cos(rad)*6.5f), y2=(float)(cy+Math.Sin(rad)*6.5f);
-                    g.DrawLine(p, x1, y1, x2, y2);
-                }
+                // High contrast white controls over the accent-colored acrylic surface
+                fillBrush        = Brushes.White;
+                trackBgBrush     = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255));
+                thumbBorderBrush = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
             }
             else
             {
-                // contrast: circle, fill left half
-                var rc = new RectangleF(cx-5, cy-5, 10, 10);
-                g.DrawEllipse(p, rc);
-                var clip = new Region(new RectangleF(cx-5, cy-5, 5, 10));
-                g.Clip = clip;
-                g.FillEllipse(br, rc);
-                g.ResetClip();
+                fillBrush        = new SolidColorBrush(fillColor);
+                trackBgBrush     = isDark
+                    ? new SolidColorBrush(Color.FromArgb(50, 255, 255, 255))
+                    : new SolidColorBrush(Color.FromArgb(35, 0, 0, 0));
+                thumbBorderBrush = new SolidColorBrush(Color.FromArgb(65, 0, 0, 0));
             }
-        }
-    }
 
-    // 
-    // GearCtl — settings gear button
-    // 
-    sealed class GearCtl : Control
-    {
-        bool _hov;
-        public GearCtl()
-        {
-            Width = 30; Height = 26; Cursor = Cursors.Hand;
-            BackColor = ColForm;
-            SetStyle(ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer, true);
-        }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(_hov ? ColGearBgHov : ColForm);
-            if (_hov)
+            _trackBg = new Border
             {
-                using var rr = RndPath(0, 0, Width, Height, 4);
-                using var fill = new SolidBrush(ColGearBgHov);
-                g.FillPath(fill, rr);
-            }
-            // Draw gear icon
-            var col = _hov ? ColGearHov : ColGearNorm;
-            using var pen  = new Pen(col, 1.5f);
-            using var solB = new SolidBrush(col);
-            int ox = Width/2, oy = Height/2;
-            // outer teeth
-            for (int a = 0; a < 360; a += 45)
+                Height       = TrackH,
+                CornerRadius = new CornerRadius(TrackH / 2.0),
+                Background   = trackBgBrush
+            };
+
+            _trackFill = new Border
             {
-                double r = a * Math.PI / 180;
-                float x1=(float)(ox+Math.Cos(r)*5), y1=(float)(oy+Math.Sin(r)*5);
-                float x2=(float)(ox+Math.Cos(r)*7.5f), y2=(float)(oy+Math.Sin(r)*7.5f);
-                g.DrawLine(pen, x1, y1, x2, y2);
-            }
-            g.DrawEllipse(pen, ox-5, oy-5, 10, 10);
-            g.FillEllipse(new SolidBrush(_hov ? ColGearBgHov : ColForm), ox-3, oy-3, 6, 6);
-        }
-        protected override void OnMouseEnter(EventArgs e){_hov=true; Invalidate();}
-        protected override void OnMouseLeave(EventArgs e){_hov=false;Invalidate();}
-    }
+                Height       = TrackH,
+                CornerRadius = new CornerRadius(TrackH / 2.0),
+                Background   = fillBrush
+            };
 
-    // 
-    // Track — 2px slider track + 12px white/blue-ring thumb
-    // 
-    sealed class Track : Control
-    {
-        int  _v = 50;
-        bool _drag, _hov;
-
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public int Value
-        {
-            get => _v;
-            set { int n=Math.Clamp(value,0,100); if(n==_v)return; _v=n; Invalidate(); }
-        }
-        public event Action<int>? ValueChanged;
-
-        // React CSS: height/width=12px, border=2.5px solid blue
-        // → total radius = 6f, white inner radius = 3.5f
-        const int TrackPx  = 2;
-        const float TotalR = 6f;    // total thumb radius = 6 (12px diam)
-        const float InnerR = 3.5f;  // white fill radius (12 - 2*2.5 = 7px diam)
-        const int HP       = 6;     // horizontal padding for thumb overhang
-
-        public Track()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint |
-                     ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.SupportsTransparentBackColor |
-                     ControlStyles.Selectable, true);
-            BackColor = Color.Transparent; Cursor = Cursors.Hand;
-            TabStop = false;
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(ColCard);  // card surface — makes track look native to the card
-
-            int tl=HP, tr=Width-HP, tw=tr-tl, cy=Height/2;
-            int tx=tl+(int)Math.Round(_v/100.0*tw);
-            tx=Math.Clamp(tx,tl,tr);
-
-            // Empty track (h-[2px] rounded-full)
-            FillR(g, ColTrackBg, tl, cy-1, tw, TrackPx);
-            // Blue filled portion
-            if(tx-tl>0) FillR(g, ColBlue, tl, cy-1, tx-tl, TrackPx);
-
-            // Subtle hover glow (same diameter as thumb)
-            if(_drag||_hov)
+            // 18px circle matching native Windows 11 volume/brightness thumb
+            _thumb = new Border
             {
-                using var gb = new SolidBrush(Color.FromArgb(45,59,130,246));
-                float gr = TotalR + 3;
-                g.FillEllipse(gb, tx-gr, cy-gr, gr*2, gr*2);
+                Width                 = ThumbSize,
+                Height                = ThumbSize,
+                CornerRadius          = new CornerRadius(HalfThumb),
+                Background            = Brushes.White,
+                BorderBrush           = thumbBorderBrush,
+                BorderThickness       = new Thickness(1.5),
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                Effect                = new DropShadowEffect
+                {
+                    Color       = Color.FromArgb(70, 0, 0, 0),
+                    BlurRadius  = 4,
+                    ShadowDepth = 1,
+                    Direction   = 270
+                }
+            };
+
+            Children.Add(_trackBg);
+            Children.Add(_trackFill);
+            Children.Add(_thumb);
+
+            Loaded += (_, _) => UpdateVisuals();
+            SizeChanged += (_, _) => UpdateVisuals();
+
+            MouseLeftButtonDown += (s, e) =>
+            {
+                _isDragging = true;
+                CaptureMouse();
+                _thumb.RenderTransform = new ScaleTransform(1.12, 1.12);
+                SetFromPosition(e.GetPosition(this).X);
+            };
+
+            MouseMove += (s, e) =>
+            {
+                if (_isDragging) SetFromPosition(e.GetPosition(this).X);
+            };
+
+            MouseLeftButtonUp += (s, e) =>
+            {
+                if (_isDragging)
+                {
+                    _isDragging = false;
+                    ReleaseMouseCapture();
+                    _thumb.RenderTransform = Transform.Identity;
+                }
+            };
+
+            MouseWheel += (s, e) =>
+            {
+                int step = SettingsManager.Current.BrightnessStep;
+                int delta = e.Delta > 0 ? step : -step;
+                int newValue = Math.Clamp(_value + delta, 0, 100);
+                if (newValue != _value)
+                {
+                    _value = newValue;
+                    UpdateVisuals();
+                    _onValueChanged(_value);
+                }
+            };
+
+            MouseEnter += (_, _) =>
+            {
+                _thumb.RenderTransform = new ScaleTransform(1.11, 1.11);
+            };
+
+            MouseLeave += (_, _) =>
+            {
+                if (!_isDragging)
+                    _thumb.RenderTransform = Transform.Identity;
+            };
+        }
+
+        private void SetFromPosition(double x)
+        {
+            double availableWidth = ActualWidth - ThumbSize;
+            if (availableWidth <= 0) return;
+            double p = Math.Clamp((x - HalfThumb) / availableWidth, 0.0, 1.0);
+            int newVal = (int)Math.Round(p * 100.0);
+            if (newVal != _value)
+            {
+                _value = newVal;
+                UpdateVisuals();
+                _onValueChanged(_value);
             }
-
-            // Thumb: blue ring circle first, then white fill on top
-            float scale = _drag ? 1.08f : 1.0f;
-            float tr2   = TotalR * scale;
-            float ir    = InnerR * scale;
-            using var rb = new SolidBrush(ColBlue);
-            g.FillEllipse(rb, tx-tr2, cy-tr2, tr2*2, tr2*2);
-            using var wb = new SolidBrush(Color.FromArgb(255,255,255));
-            g.FillEllipse(wb, tx-ir, cy-ir, ir*2, ir*2);
         }
 
-        protected override void OnMouseDown(MouseEventArgs e)
-        { if(e.Button!=MouseButtons.Left)return; _drag=true; Capture=true; SetV(e.X); }
-        protected override void OnMouseMove(MouseEventArgs e){if(_drag)SetV(e.X);}
-        protected override void OnMouseUp(MouseEventArgs e){_drag=false;Capture=false;Refresh();}
-        protected override void OnMouseEnter(EventArgs e){_hov=true; Focus(); Invalidate();}
-        protected override void OnMouseLeave(EventArgs e){_hov=false; Invalidate();}
-        protected override void OnMouseWheel(MouseEventArgs e)
+        private void UpdateVisuals()
         {
-            int step  = Settings.SettingsManager.Current.BrightnessStep;
-            int delta = e.Delta > 0 ? step : -step;
-            int nv    = Math.Clamp(_v + delta, 0, 100);
-            if(nv==_v) return;
-            _v=nv; Refresh(); ValueChanged?.Invoke(_v);
-        }
+            double w = ActualWidth;
+            if (w <= 0) return;
 
-        void SetV(int x)
-        {
-            int tw=Width-HP*2; if(tw<=0)return;
-            int p=Math.Clamp((int)Math.Round((x-HP)*100.0/tw),0,100);
-            if(p==_v)return; _v=p; Refresh(); ValueChanged?.Invoke(_v);
-        }
+            double trackY = (ActualHeight - TrackH) / 2.0;
+            double availableWidth = Math.Max(0, w - ThumbSize);
+            double fillWidth = (_value / 100.0) * availableWidth;
+            double thumbX = fillWidth;
+            double thumbY = (ActualHeight - ThumbSize) / 2.0;
 
-        static void FillR(Graphics g, Color c, int x, int y, int w, int h)
-        {
-            if(w<=0)return;
-            using var b=new SolidBrush(c);
-            g.FillRectangle(b, x, y, w, h);
+            SetLeft(_trackBg, HalfThumb);
+            SetTop(_trackBg, trackY);
+            _trackBg.Width = availableWidth;
+
+            SetLeft(_trackFill, HalfThumb);
+            SetTop(_trackFill, trackY);
+            _trackFill.Width = fillWidth;
+
+            SetLeft(_thumb, thumbX);
+            SetTop(_thumb, thumbY);
         }
     }
 }

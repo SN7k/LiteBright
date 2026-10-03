@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define AppName      "LiteBright"
-#define AppVersion   "1.0.0"
+#define AppVersion   "1.2.0"
 #define AppPublisher "LiteBright"
 #define AppExeName   "BrightnessController.exe"
 #define AppId        "{{A7B3C2D1-E4F5-4A6B-8C9D-0E1F2A3B4C5D}"
@@ -15,9 +15,9 @@
 AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisherURL=https://github.com/
-AppSupportURL=https://github.com/
-AppUpdatesURL=https://github.com/
+AppPublisherURL=https://github.com/SN7k/LiteBright
+AppSupportURL=https://github.com/SN7k/LiteBright
+AppUpdatesURL=https://github.com/SN7k/LiteBright
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}

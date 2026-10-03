@@ -4,6 +4,8 @@
 
 
 # LiteBright
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/litebright)
 </div>
 
 <br>
@@ -18,10 +20,11 @@ It lets you adjust your screen brightness instantly, without opening settings or
 
 | Version | Date | Notes | Download |
 |---|---|---|---|
-| **1.0.0** | Feb 2026 | Initial release | [Download](https://github.com/SN7k/LightBright/releases/download/v1.0.0/LiteBright-Setup-1.0.0.exe) |
+| **1.2.0** | Oct 2026 | Windows 11 Fluent context menu, in-window dropdowns, 35+ languages, DDC/CI telemetry & Donate button | [Download](https://github.com/SN7k/LiteBright/releases/tag/v1.2.0) |
+| **1.0.0** | Feb 2026 | Initial release | [Download](https://github.com/SN7k/LiteBright/releases/download/v1.0.0/LiteBright-Setup-1.0.0.exe) |
 
 
-<br><br><br><br>
+<br><br>
 
 
 ## Features
@@ -37,6 +40,9 @@ It lets you adjust your screen brightness instantly, without opening settings or
 | **Start with Windows** | Launches on login via the user registry — no admin required |
 | **DDC/CI support** | Full hardware brightness control on compatible external monitors |
 | **WMI support** | Reliable brightness control on laptops and built-in displays |
+| **Multi-Language (35+ Languages)** | Full localization support across 35+ world languages |
+| **Monitor Diagnostics** | EDID internal names, communication method, normalization range & HDR status |
+| **Fluent Tray Context Menu** | Modern Windows 11 rounded context menu with smooth animations |
 
 <br>
 

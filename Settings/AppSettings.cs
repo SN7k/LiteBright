@@ -9,9 +9,14 @@ namespace BrightnessController.Settings;
 public sealed class AppSettings
 {
     // ── General ───────────────────────────────────────────────────────────────
-    public bool StartWithWindows    { get; set; } = true;
-    public bool EnableContrastSlider{ get; set; } = false;
-    public int  BrightnessStep      { get; set; } = 10;   // % per hotkey press
+    public bool   StartWithWindows          { get; set; } = true;
+    public bool   ApplyBrightnessAtStartup  { get; set; } = true;
+    public string Language                  { get; set; } = "System language (default)";
+    public string Theme                     { get; set; } = "System preferences (default)";
+    public bool   AutoBrightness            { get; set; } = false;
+    public bool   EnableContrastSlider      { get; set; } = false;
+    public int    BrightnessStep            { get; set; } = 10;   // % per hotkey press
+
 
     // ── Hotkey bindings ───────────────────────────────────────────────────────
     // Stored as a list so it survives JSON round-trips cleanly.
