@@ -20,7 +20,7 @@ It lets you adjust your screen brightness instantly, without opening settings or
 
 | Version | Date | Notes | Download |
 |---|---|---|---|
-| **1.2.0** | Oct 2026 | Windows 11 Fluent context menu, in-window dropdowns, 35+ languages, DDC/CI telemetry & Donate button | [Download](https://github.com/SN7k/LiteBright/releases/tag/v1.2.0) |
+| **1.2.0** | Oct 2026 | Windows 11 Fluent context menu, in-window dropdowns, 35+ languages, DDC/CI telemetry & Donate button | [Download](https://github.com/SN7k/LiteBright/releases/download/v1.2.0/LiteBright-Setup-1.2.0.exe) |
 | **1.0.0** | Feb 2026 | Initial release | [Download](https://github.com/SN7k/LiteBright/releases/download/v1.0.0/LiteBright-Setup-1.0.0.exe) |
 
 
