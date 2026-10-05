@@ -28,10 +28,20 @@ namespace BrightnessController.UI;
 public sealed class BrightnessPanel : Window, IDisposable
 {
     private readonly MonitorManager _monitors;
+    private readonly Dictionary<string, (FluentSlider bSlider, TextBlock valText)> _monitorControls = new();
     public event Action? SettingsRequested;
 
     public bool Visible => IsVisible;
     public IntPtr Handle => new WindowInteropHelper(this).EnsureHandle();
+
+    public void UpdateBrightness(MonitorInfo mon, int percent)
+    {
+        if (_monitorControls.TryGetValue(mon.InternalName, out var ctrl))
+        {
+            ctrl.bSlider.SetValueDirect(percent);
+            ctrl.valText.Text = $"{percent}%";
+        }
+    }
 
     // Typography
     public static string SystemFontName => _systemFontName ??= GetSystemFont();
@@ -246,11 +256,22 @@ public sealed class BrightnessPanel : Window, IDisposable
         catch { }
     }
 
+    public void Prewarm()
+    {
+        BuildUI();
+        ApplyDwmAttributes();
+        if (Content is UIElement contentElement)
+        {
+            contentElement.Measure(new System.Windows.Size(Width, double.PositiveInfinity));
+        }
+    }
+
     public void RefreshMonitors()
     {
+        BuildUI();
         if (IsVisible)
         {
-            BuildUI();
+            RepositionWindow();
         }
     }
 
@@ -316,10 +337,15 @@ public sealed class BrightnessPanel : Window, IDisposable
 
         _detectedTaskbarTop = taskbarTop;
 
-        // 4. Measure content size
+        // 4. Measure content size accurately from the content root element
+        if (Content is UIElement contentElement)
+        {
+            contentElement.Measure(new System.Windows.Size(Width, double.PositiveInfinity));
+        }
         UpdateLayout();
-        Measure(new System.Windows.Size(Width, double.PositiveInfinity));
-        double dipHeight = DesiredSize.Height > 50 ? DesiredSize.Height : (ActualHeight > 50 ? ActualHeight : 240);
+
+        double measuredHeight = (Content as UIElement)?.DesiredSize.Height ?? 0;
+        double dipHeight = measuredHeight > 50 ? measuredHeight : (ActualHeight > 50 ? ActualHeight : 240);
 
         int physWidth  = (int)Math.Round(Width * _activeScaleX);
         int physHeight = (int)Math.Round(dipHeight * _activeScaleY);
@@ -345,6 +371,19 @@ public sealed class BrightnessPanel : Window, IDisposable
         Show();
         Activate();
 
+        // If actual rendered height differs after Show(), recalculate targetY to prevent any gap
+        if (ActualHeight > 50 && Math.Abs(ActualHeight - dipHeight) >= 1)
+        {
+            dipHeight = ActualHeight;
+            physHeight = (int)Math.Round(dipHeight * _activeScaleY);
+            targetY = _detectedTaskbarTop - physHeight - gapY;
+            if (targetY < mi.rcWork.Top + gapY)
+                targetY = mi.rcWork.Top + gapY;
+
+            Left = targetX / _activeScaleX;
+            Top  = targetY / _activeScaleY;
+        }
+
         // 6. Set HWND position and topmost Z-order via Win32 directly in physical pixels
         SetWindowPos(hwnd, HWND_TOPMOST, targetX, targetY, physWidth, physHeight, SWP_SHOWWINDOW);
         SetForegroundWindow(hwnd);
@@ -353,7 +392,7 @@ public sealed class BrightnessPanel : Window, IDisposable
     private void RepositionWindow()
     {
         IntPtr hwnd = new WindowInteropHelper(this).EnsureHandle();
-        double currentDipHeight = ActualHeight > 50 ? ActualHeight : DesiredSize.Height;
+        double currentDipHeight = ActualHeight > 50 ? ActualHeight : ((Content as UIElement)?.DesiredSize.Height ?? DesiredSize.Height);
         if (currentDipHeight <= 0) return;
 
         int physWidth  = (int)Math.Round(Width * _activeScaleX);
@@ -380,6 +419,7 @@ public sealed class BrightnessPanel : Window, IDisposable
 
     private void BuildUI()
     {
+        _monitorControls.Clear();
         bool isDark = !ThemeHelper.IsLightTheme;
         var palette = ThemeHelper.GetFlyoutPalette();
 
@@ -496,6 +536,19 @@ public sealed class BrightnessPanel : Window, IDisposable
             brightDock.Children.Add(bSlider);
             monSection.Children.Add(brightDock);
 
+            // Enable live mouse wheel scrolling across the entire monitor card
+            monSection.Background = Brushes.Transparent;
+            monSection.MouseWheel += (s, e) =>
+            {
+                if (!m.IsCommunicationSupported) return;
+                int step = SettingsManager.Current.BrightnessStep;
+                int delta = e.Delta > 0 ? step : -step;
+                bSlider.Value += delta;
+                e.Handled = true;
+            };
+
+            _monitorControls[mon.InternalName] = (bSlider, valText);
+
             // Contrast Row (if enabled)
             if (showContrast)
             {
@@ -533,6 +586,14 @@ public sealed class BrightnessPanel : Window, IDisposable
                     cValText.Text = $"{pct}%";
                     if (!m.IsInternal) _monitors.SetContrast(m, pct);
                 });
+                contrastDock.Background = Brushes.Transparent;
+                contrastDock.MouseWheel += (s, e) =>
+                {
+                    int step = SettingsManager.Current.BrightnessStep;
+                    int delta = e.Delta > 0 ? step : -step;
+                    cSlider.Value += delta;
+                    e.Handled = true;
+                };
                 contrastDock.Children.Add(cSlider);
                 monSection.Children.Add(contrastDock);
             }
@@ -634,6 +695,21 @@ public sealed class BrightnessPanel : Window, IDisposable
         footerGrid.Children.Add(gearBtn);
 
         mainStack.Children.Add(footerGrid);
+
+        // Fallback: scrolling anywhere on the panel background adjusts the primary active display
+        root.MouseWheel += (s, e) =>
+        {
+            if (e.Handled) return;
+            var targetMon = mons.FirstOrDefault(x => x.IsCommunicationSupported);
+            if (targetMon != null && _monitorControls.TryGetValue(targetMon.InternalName, out var ctrl))
+            {
+                int step = SettingsManager.Current.BrightnessStep;
+                int delta = e.Delta > 0 ? step : -step;
+                ctrl.bSlider.Value += delta;
+                e.Handled = true;
+            }
+        };
+
         root.Child = mainStack;
         Content = root;
     }
@@ -670,7 +746,16 @@ public sealed class BrightnessPanel : Window, IDisposable
                 if (clamped == _value) return;
                 _value = clamped;
                 UpdateVisuals();
+                _onValueChanged?.Invoke(_value);
             }
+        }
+
+        public void SetValueDirect(int value)
+        {
+            int clamped = Math.Clamp(value, 0, 100);
+            if (clamped == _value) return;
+            _value = clamped;
+            UpdateVisuals();
         }
 
         public FluentSlider(int initialValue, Color fillColor, bool isAccentThemed, bool isDark, Action<int> onValueChanged)
@@ -768,13 +853,8 @@ public sealed class BrightnessPanel : Window, IDisposable
             {
                 int step = SettingsManager.Current.BrightnessStep;
                 int delta = e.Delta > 0 ? step : -step;
-                int newValue = Math.Clamp(_value + delta, 0, 100);
-                if (newValue != _value)
-                {
-                    _value = newValue;
-                    UpdateVisuals();
-                    _onValueChanged(_value);
-                }
+                Value += delta;
+                e.Handled = true;
             };
 
             MouseEnter += (_, _) =>

@@ -30,17 +30,20 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext(bool openSettingsOnStart = false)
     {
+        // 1. Show tray icon immediately (< 5ms) for instant startup feedback
+        SetupTrayIcon();
+        _tooltipResetTimer.Tick += (_, _) => { _tooltipResetTimer.Stop(); _trayIcon.Text = "LiteBright"; };
+
         _hotkeyManager = new HotkeyManager();
         _hotkeyManager.HotkeyPressed += OnHotkeyPressed;
 
+        // 2. Discover displays and prewarm panel
         _monitorManager.Refresh();
 
         _panel = new BrightnessPanel(_monitorManager);
         _panel.SettingsRequested += OpenSettings;
         _ = _panel.Handle;
-
-        SetupTrayIcon();
-        _tooltipResetTimer.Tick += (_, _) => { _tooltipResetTimer.Stop(); _trayIcon.Text = "LiteBright"; };
+        _panel.Prewarm();
 
         _mouseHookProc = MouseHookCallback;
         using var mod = System.Diagnostics.Process.GetCurrentProcess().MainModule!;
@@ -52,7 +55,6 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         Helpers.StartupManager.Apply(SettingsManager.Current.StartWithWindows);
 
-        SystemEvents_DisplaySettingsChanged(this, EventArgs.Empty);
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged +=
             SystemEvents_DisplaySettingsChanged;
 
@@ -99,7 +101,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _trayMenu = new TrayContextMenu(
                 onRefreshDisplays: () =>
                 {
-                    _monitorManager.Refresh();
+                    _monitorManager.Refresh(forceWmiRefresh: true);
                     _panel.RefreshMonitors();
                 },
                 onOpenSettings: () => OpenSettings(),
@@ -135,7 +137,6 @@ public sealed class TrayApplicationContext : ApplicationContext
             _panel.Hide();
             return;
         }
-        _monitorManager.Refresh();
         _panel.ShowAtTray(_lastTrayClickPosition);
     }
 
@@ -156,6 +157,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             int pct = mon.IsInternal ? mon.Brightness : mon.BrightnessPercent;
             _trayIcon.Text = $"LiteBright\n{mon.Name}: {pct}%";
+            if (_panel.Visible)
+            {
+                _panel.BeginInvoke(() => _panel.UpdateBrightness(mon, pct));
+            }
         }
     }
 
@@ -188,7 +193,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void SystemEvents_DisplaySettingsChanged(object? sender, EventArgs e)
     {
-        _monitorManager.Refresh();
+        _monitorManager.Refresh(forceWmiRefresh: true);
         _panel.RefreshMonitors();
     }
 
@@ -230,6 +235,10 @@ public sealed class TrayApplicationContext : ApplicationContext
                             _trayIcon.Text = $"LiteBright ({monName}): {newPct}%";
                             _tooltipResetTimer.Stop();
                             _tooltipResetTimer.Start();
+                            if (_panel.Visible)
+                            {
+                                _panel.UpdateBrightness(mons[0], newPct);
+                            }
                         });
                     }
 

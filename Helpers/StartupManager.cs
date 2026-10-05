@@ -8,7 +8,7 @@ public static class StartupManager
     private const string ValueName = "BrightnessController";
 
     private static string ExePath => Environment.ProcessPath
-        ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+        ?? System.IO.Path.Combine(AppContext.BaseDirectory, "BrightnessController.exe");
 
 
     public static bool IsEnabled()
@@ -29,6 +29,11 @@ public static class StartupManager
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             key?.SetValue(ValueName, $"\"{ExePath}\"");
+
+            // Disable Windows Explorer 10-30 second startup delay for user startup apps
+            using var serializeKey = Registry.CurrentUser.CreateSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize");
+            serializeKey?.SetValue("StartupDelayInMSec", 0, RegistryValueKind.DWord);
         }
         catch { }
     }

@@ -1,6 +1,14 @@
+using System.IO;
 using System.Management;
+using System.Text.Json;
 
 namespace BrightnessController.Monitors;
+
+public sealed class WmiCacheData
+{
+    public bool WmiAvailable { get; set; }
+    public List<WmiMonitorRecord> Records { get; set; } = new();
+}
 
 public sealed class WmiMonitorRecord
 {
@@ -16,6 +24,58 @@ internal static class WmiMonitorHelper
     private const string WmiScope            = @"root\WMI";
     private const string BrightnessClass     = "WmiMonitorBrightness";
     private const string BrightnessMethodCls = "WmiMonitorBrightnessMethods";
+
+    private static readonly string CachePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "BrightnessController", "wmi_cache.json");
+
+    private static (bool wmiAvailable, List<WmiMonitorRecord> records)? _memoryCache;
+
+    public static (bool wmiAvailable, List<WmiMonitorRecord> records) GetWmiDataCached(bool forceRefresh = false)
+    {
+        if (!forceRefresh && _memoryCache.HasValue)
+        {
+            return _memoryCache.Value;
+        }
+
+        if (!forceRefresh)
+        {
+            try
+            {
+                if (File.Exists(CachePath))
+                {
+                    string json = File.ReadAllText(CachePath);
+                    var cached = JsonSerializer.Deserialize<WmiCacheData>(json);
+                    if (cached != null)
+                    {
+                        _memoryCache = (cached.WmiAvailable, cached.Records);
+                        return _memoryCache.Value;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Query both WMI methods in parallel to cut latency in half
+        var availTask = Task.Run(IsAvailable);
+        var recsTask = Task.Run(GetWmiMonitors);
+        Task.WaitAll(availTask, recsTask);
+
+        bool avail = availTask.Result;
+        var recs = recsTask.Result;
+        _memoryCache = (avail, recs);
+
+        try
+        {
+            string? dir = Path.GetDirectoryName(CachePath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            var data = new WmiCacheData { WmiAvailable = avail, Records = recs };
+            File.WriteAllText(CachePath, JsonSerializer.Serialize(data));
+        }
+        catch { }
+
+        return _memoryCache.Value;
+    }
 
     public static List<WmiMonitorRecord> GetWmiMonitors()
     {

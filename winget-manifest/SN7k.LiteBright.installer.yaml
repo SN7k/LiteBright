@@ -14,7 +14,7 @@ Installers:
   - Architecture: x64
     Scope: user
     InstallerUrl: https://github.com/SN7k/LiteBright/releases/download/v1.2.0/LiteBright-Setup-1.2.0.exe
-    InstallerSha256: 8AB8F7FAE3CBF5D59B9C3047F42E9C22A2691A5382270719FDF64C0E52660385
+    InstallerSha256: 44F57C25F351E9CB94CE1503626DF2D14C0BDD424F768276DB9B3D9BC39B4734
     ProductCode: '{A7B3C2D1-E4F5-4A6B-8C9D-0E1F2A3B4C5D}_is1'
 ManifestType: installer
 ManifestVersion: 1.9.0

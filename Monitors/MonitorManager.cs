@@ -13,13 +13,12 @@ public sealed class MonitorManager : IDisposable
 
     public MonitorManager() { }
 
-    public void Refresh()
+    public void Refresh(bool forceWmiRefresh = false)
     {
         DisposeMonitors();
 
         var newList = new List<MonitorInfo>();
-        bool wmiAvailable = WmiMonitorHelper.IsAvailable();
-        var wmiRecords = WmiMonitorHelper.GetWmiMonitors();
+        var (wmiAvailable, wmiRecords) = WmiMonitorHelper.GetWmiDataCached(forceWmiRefresh);
         int index = 0;
 
         NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
