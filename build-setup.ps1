@@ -1,12 +1,28 @@
 # ============================================================
-#  LiteBright — Setup Builder Script
-#  Publishes the Release build and compiles the Inno Setup installer.
+#  LiteBright — Setup Builder Script (Self-Contained)
+#  Publishes self-contained Release and compiles Inno Setup installer.
 # ============================================================
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "==> Publishing LiteBright (Release win-x64)..." -ForegroundColor Cyan
-dotnet publish -c Release -r win-x64 --self-contained false -o "bin\publish-setup"
+$ProjectRoot = $PSScriptRoot
+$PublishDir  = Join-Path $ProjectRoot "bin\publish-setup"
+$InstallerScript = Join-Path $ProjectRoot "installer\LiteBright.iss"
+
+Write-Host "==> Publishing LiteBright (Self-Contained win-x64)..." -ForegroundColor Cyan
+dotnet build-server shutdown | Out-Null
+if (Test-Path $PublishDir) {
+    Remove-Item -Path $PublishDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+dotnet publish (Join-Path $ProjectRoot "BrightnessController.csproj") `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=false `
+    -o $PublishDir
+
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed!" }
 
 # Locate Inno Setup Compiler (ISCC.exe)
 $isccCandidates = @(
@@ -23,13 +39,13 @@ if (-not $iscc) {
 }
 
 Write-Host "==> Compiling installer with Inno Setup ($iscc)..." -ForegroundColor Cyan
-& $iscc "installer\LiteBright.iss"
+& $iscc $InstallerScript
 
-$outputInstaller = "bin\installer-output\LiteBright-Setup-1.2.0.exe"
+$outputInstaller = Join-Path $ProjectRoot "bin\installer-output\LiteBright-Setup-1.2.1.exe"
 if (Test-Path $outputInstaller) {
     $hash = (Get-FileHash $outputInstaller -Algorithm SHA256).Hash
     $size = (Get-Item $outputInstaller).Length / 1MB
-    Write-Host "`n[SUCCESS] Installer built successfully!" -ForegroundColor Green
+    Write-Host "`n[SUCCESS] Self-contained installer built successfully!" -ForegroundColor Green
     Write-Host "File:   $outputInstaller ($([Math]::Round($size, 2)) MB)"
     Write-Host "SHA256: $hash"
 }

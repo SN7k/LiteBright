@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define AppName      "LiteBright"
-#define AppVersion   "1.2.0"
+#define AppVersion   "1.2.1"
 #define AppPublisher "LiteBright"
 #define AppExeName   "BrightnessController.exe"
 #define AppId        "{{A7B3C2D1-E4F5-4A6B-8C9D-0E1F2A3B4C5D}"
