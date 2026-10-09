@@ -41,7 +41,7 @@ if (-not $iscc) {
 Write-Host "==> Compiling installer with Inno Setup ($iscc)..." -ForegroundColor Cyan
 & $iscc $InstallerScript
 
-$outputInstaller = Join-Path $ProjectRoot "bin\installer-output\LiteBright-Setup-1.2.1.exe"
+$outputInstaller = Join-Path $ProjectRoot "bin\installer-output\LiteBright-Setup-1.2.2.exe"
 if (Test-Path $outputInstaller) {
     $hash = (Get-FileHash $outputInstaller -Algorithm SHA256).Hash
     $size = (Get-Item $outputInstaller).Length / 1MB

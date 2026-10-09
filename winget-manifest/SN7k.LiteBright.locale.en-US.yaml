@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 
 PackageIdentifier: SN7k.LiteBright
-PackageVersion: 1.2.1
+PackageVersion: 1.2.2
 PackageLocale: en-US
 Publisher: SN7k
 PublisherUrl: https://github.com/SN7k
@@ -20,6 +20,6 @@ Tags:
   - contrast
   - ddc-ci
   - screen
-ReleaseNotesUrl: https://github.com/SN7k/LiteBright/releases/tag/v1.2.1
+ReleaseNotesUrl: https://github.com/SN7k/LiteBright/releases/tag/v1.2.2
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0

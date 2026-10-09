@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
 
 PackageIdentifier: SN7k.LiteBright
-PackageVersion: 1.2.1
+PackageVersion: 1.2.2
 MinimumOSVersion: 10.0.0.0
 InstallerType: inno
 InstallModes:
@@ -13,8 +13,8 @@ ReleaseDate: 2026-10-09
 Installers:
   - Architecture: x64
     Scope: user
-    InstallerUrl: https://github.com/SN7k/LiteBright/releases/download/v1.2.1/LiteBright-Setup-1.2.1.exe
-    InstallerSha256: 6235E29E2498BCA6E74D310856C058DEEF80008BBF49377EBA37366389CF48B1
+    InstallerUrl: https://github.com/SN7k/LiteBright/releases/download/v1.2.2/LiteBright-Setup-1.2.2.exe
+    InstallerSha256: 4E21C14AD1A51E7EE6E64ADB6657FDDC21C694E9754BE29F27EB356FB93C457F
     ProductCode: '{A7B3C2D1-E4F5-4A6B-8C9D-0E1F2A3B4C5D}_is1'
 ManifestType: installer
 ManifestVersion: 1.9.0

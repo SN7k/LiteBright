@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $BuildDir    = Join-Path $ProjectRoot "bin\msix-build"
 $OutputDir   = Join-Path $ProjectRoot "bin\msix-output"
-$PackageName = "LiteBright_1.2.1.0_x64.msix"
+$PackageName = "LiteBright_1.2.2.0_x64.msix"
 $OutputMsix  = Join-Path $OutputDir $PackageName
 $AssetsDir   = Join-Path $ProjectRoot "msix-assets"
 
@@ -58,7 +58,7 @@ $ManifestXml = @"
   <Identity Name="SNKDEVWORKS.LiteBright"
             ProcessorArchitecture="x64"
             Publisher="CN=D6D1B1CC-C565-4B68-BDD7-5C3D7CC9A623"
-            Version="1.2.1.0" />
+            Version="1.2.2.0" />
 
   <Properties>
     <DisplayName>LiteBright</DisplayName>
