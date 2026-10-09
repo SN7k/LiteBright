@@ -55,7 +55,10 @@ public sealed class SettingsForm : Window
 
     private readonly MonitorManager _monitorManager;
     private readonly AppSettings _draft;
-    public const string DonationUrl = "https://buymeacoffee.com/litebright";
+    public const string KofiUrl = "https://ko-fi.com/snkdevworks";
+    public const string BuyMeACoffeeUrl = "https://buymeacoffee.com/sn7k";
+    public const string PayPalUrl = "https://paypal.me/ShombhuKaran";
+    public const string DonationUrl = KofiUrl;
     private readonly List<HotkeyBinder> _hotkeyBinders = new();
 
     private ContentControl _pageContainer = null!;
@@ -317,6 +320,20 @@ public sealed class SettingsForm : Window
         DockPanel.SetDock(heartIcon, Dock.Left);
         donateDock.Children.Add(heartIcon);
 
+        var donateChevron = new TextBlock
+        {
+            Text              = "\uE70E", // ChevronUp indicating upward menu popup
+            FontFamily        = new FontFamily(iconFont),
+            FontSize          = 9,
+            Foreground        = isDark
+                ? new SolidColorBrush(Color.FromArgb(140, 255, 255, 255))
+                : new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin            = new Thickness(4, 0, 0, 0)
+        };
+        DockPanel.SetDock(donateChevron, Dock.Right);
+        donateDock.Children.Add(donateChevron);
+
         var donateText = new TextBlock
         {
             Text              = LocalizationManager.T("SETTINGS_DONATE", "Donate"),
@@ -341,17 +358,10 @@ public sealed class SettingsForm : Window
                 ? new SolidColorBrush(Color.FromArgb(18, 255, 255, 255))
                 : new SolidColorBrush(Color.FromArgb(12, 0, 0, 0));
         };
-        donateBtn.MouseLeftButtonUp += (_, _) =>
+        donateBtn.MouseLeftButtonUp += (_, e) =>
         {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName        = DonationUrl,
-                    UseShellExecute = true
-                });
-            }
-            catch { }
+            e.Handled = true;
+            ShowDonateMenu(donateBtn, isDark, textFont, iconFont);
         };
 
         Grid.SetRow(donateBtn, 1);
@@ -1559,6 +1569,264 @@ public sealed class SettingsForm : Window
             _dropdownOverlay.Children.Clear();
             _dropdownOverlay.Visibility = Visibility.Collapsed;
         }
+    }
+
+    public void ShowDonateMenu(FrameworkElement anchor, bool isDark, string textFont, string iconFont)
+    {
+        if (_currentDropdownAnchor == anchor)
+        {
+            CloseDropdownOverlay();
+            return;
+        }
+
+        CloseDropdownOverlay();
+        _currentDropdownAnchor = anchor;
+
+        var backdrop = new Border
+        {
+            Background          = Brushes.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment   = VerticalAlignment.Stretch
+        };
+        backdrop.MouseLeftButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            CloseDropdownOverlay();
+        };
+        _dropdownOverlay.Children.Add(backdrop);
+
+        System.Windows.Point pt;
+        try
+        {
+            pt = anchor.TranslatePoint(new System.Windows.Point(0, 0), _rootGrid);
+        }
+        catch
+        {
+            return;
+        }
+
+        double menuWidth = 246;
+        double menuHeight = 224;
+
+        double rootW = _rootGrid.ActualWidth > 0 ? _rootGrid.ActualWidth : Width;
+        double rootH = _rootGrid.ActualHeight > 0 ? _rootGrid.ActualHeight : Height;
+
+        double menuLeft = pt.X;
+        if (menuLeft + menuWidth > rootW - 8) menuLeft = rootW - menuWidth - 8;
+        if (menuLeft < 8) menuLeft = 8;
+
+        double menuTop = pt.Y - menuHeight - 6;
+        if (menuTop < 8) menuTop = pt.Y + (anchor.ActualHeight > 0 ? anchor.ActualHeight : 36) + 6;
+
+        var menuBorder = new Border
+        {
+            Width               = menuWidth,
+            Height              = menuHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment   = VerticalAlignment.Top,
+            Margin              = new Thickness(menuLeft, menuTop, 0, 0),
+            Background          = isDark
+                ? new SolidColorBrush(Color.FromArgb(252, 34, 34, 38))
+                : new SolidColorBrush(Color.FromArgb(252, 252, 252, 254)),
+            BorderBrush         = isDark
+                ? new SolidColorBrush(Color.FromArgb(255, 60, 60, 66))
+                : new SolidColorBrush(Color.FromArgb(255, 218, 218, 224)),
+            BorderThickness     = new Thickness(1),
+            CornerRadius        = new CornerRadius(8),
+            Padding             = new Thickness(6, 7, 6, 7),
+            Effect              = new DropShadowEffect
+            {
+                BlurRadius  = 16,
+                ShadowDepth = 3,
+                Direction   = 270,
+                Color       = Colors.Black,
+                Opacity     = isDark ? 0.65 : 0.20
+            }
+        };
+
+        var menuStack = new StackPanel();
+
+        // Header: Heart icon + "Support LiteBright"
+        var headerDock = new DockPanel { Margin = new Thickness(8, 4, 8, 7) };
+        var heartIcon = new TextBlock
+        {
+            Text              = "\uEB52",
+            FontFamily        = new FontFamily(iconFont),
+            FontSize          = 13,
+            Foreground        = new SolidColorBrush(Color.FromArgb(255, 255, 75, 110)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin            = new Thickness(0, 0, 7, 0)
+        };
+        DockPanel.SetDock(heartIcon, Dock.Left);
+        headerDock.Children.Add(heartIcon);
+
+        var headerTitle = new TextBlock
+        {
+            Text              = LocalizationManager.T("SETTINGS_DONATE_TITLE", "Support LiteBright"),
+            FontFamily        = new FontFamily(textFont),
+            FontSize          = 12.5,
+            FontWeight        = FontWeights.SemiBold,
+            Foreground        = isDark ? Brushes.White : new SolidColorBrush(Color.FromArgb(255, 24, 24, 26)),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        headerDock.Children.Add(headerTitle);
+        menuStack.Children.Add(headerDock);
+
+        // Divider
+        menuStack.Children.Add(new Border
+        {
+            Height          = 1,
+            Background      = isDark
+                ? new SolidColorBrush(Color.FromArgb(28, 255, 255, 255))
+                : new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)),
+            Margin          = new Thickness(4, 0, 4, 5)
+        });
+
+        // 1. Ko-fi
+        menuStack.Children.Add(CreateDonateItem(
+            badgeText: "☕",
+            badgeBg: Color.FromArgb(40, 255, 94, 91),
+            badgeFg: Color.FromArgb(255, 255, 94, 91),
+            title: "Ko-fi",
+            subtitle: "Tip or subscribe on Ko-fi",
+            url: KofiUrl,
+            isDark, textFont, iconFont));
+
+        // 2. Buy Me a Coffee
+        menuStack.Children.Add(CreateDonateItem(
+            badgeText: "💛",
+            badgeBg: Color.FromArgb(40, 245, 158, 11),
+            badgeFg: Color.FromArgb(255, 245, 158, 11),
+            title: "Buy Me a Coffee",
+            subtitle: "Support via Buy Me a Coffee",
+            url: BuyMeACoffeeUrl,
+            isDark, textFont, iconFont));
+
+        // 3. PayPal
+        menuStack.Children.Add(CreateDonateItem(
+            badgeText: "💳",
+            badgeBg: Color.FromArgb(40, 0, 121, 193),
+            badgeFg: Color.FromArgb(255, 0, 140, 220),
+            title: "PayPal",
+            subtitle: "Direct tip or donation",
+            url: PayPalUrl,
+            isDark, textFont, iconFont));
+
+        menuBorder.Child = menuStack;
+        _dropdownOverlay.Children.Add(menuBorder);
+        _dropdownOverlay.Visibility = Visibility.Visible;
+    }
+
+    private UIElement CreateDonateItem(
+        string badgeText,
+        Color badgeBg,
+        Color badgeFg,
+        string title,
+        string subtitle,
+        string url,
+        bool isDark,
+        string textFont,
+        string iconFont)
+    {
+        var itemBorder = new Border
+        {
+            Height          = 50,
+            CornerRadius    = new CornerRadius(6),
+            Margin          = new Thickness(2, 2, 2, 2),
+            Background      = Brushes.Transparent,
+            Cursor          = Cursors.Hand,
+            Padding         = new Thickness(8, 0, 8, 0)
+        };
+
+        var dock = new DockPanel { LastChildFill = true };
+
+        // Left Badge
+        var badge = new Border
+        {
+            Width               = 30,
+            Height              = 30,
+            CornerRadius        = new CornerRadius(6),
+            Background          = new SolidColorBrush(badgeBg),
+            VerticalAlignment   = VerticalAlignment.Center,
+            Margin              = new Thickness(0, 0, 10, 0)
+        };
+        var badgeTb = new TextBlock
+        {
+            Text                = badgeText,
+            FontFamily          = new FontFamily("Segoe UI Emoji, Segoe UI"),
+            FontSize            = 14,
+            Foreground          = new SolidColorBrush(badgeFg),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment   = VerticalAlignment.Center
+        };
+        badge.Child = badgeTb;
+        DockPanel.SetDock(badge, Dock.Left);
+        dock.Children.Add(badge);
+
+        // Right external link arrow (\uE8A7)
+        var extIcon = new TextBlock
+        {
+            Text              = "\uE8A7",
+            FontFamily        = new FontFamily(iconFont),
+            FontSize          = 11,
+            Foreground        = isDark
+                ? new SolidColorBrush(Color.FromArgb(140, 255, 255, 255))
+                : new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin            = new Thickness(8, 0, 0, 0)
+        };
+        DockPanel.SetDock(extIcon, Dock.Right);
+        dock.Children.Add(extIcon);
+
+        // Center: Title + Subtitle
+        var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var titleTb = new TextBlock
+        {
+            Text         = title,
+            FontFamily   = new FontFamily(textFont),
+            FontSize     = 12.5,
+            FontWeight   = FontWeights.SemiBold,
+            Foreground   = isDark ? Brushes.White : new SolidColorBrush(Color.FromArgb(255, 24, 24, 26))
+        };
+        var subTb = new TextBlock
+        {
+            Text         = subtitle,
+            FontFamily   = new FontFamily(textFont),
+            FontSize     = 10.5,
+            Foreground   = isDark
+                ? new SolidColorBrush(Color.FromArgb(170, 200, 200, 205))
+                : new SolidColorBrush(Color.FromArgb(170, 95, 95, 100)),
+            Margin       = new Thickness(0, 1, 0, 0)
+        };
+        textStack.Children.Add(titleTb);
+        textStack.Children.Add(subTb);
+        dock.Children.Add(textStack);
+
+        itemBorder.Child = dock;
+
+        var hoverBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(32, 255, 255, 255))
+            : new SolidColorBrush(Color.FromArgb(18, 0, 0, 0));
+
+        itemBorder.MouseEnter += (_, _) => itemBorder.Background = hoverBg;
+        itemBorder.MouseLeave += (_, _) => itemBorder.Background = Brushes.Transparent;
+
+        itemBorder.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            CloseDropdownOverlay();
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName        = url,
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        };
+
+        return itemBorder;
     }
 
     private sealed class FluentComboBox : Border
