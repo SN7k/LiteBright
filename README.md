@@ -65,6 +65,7 @@ LiteBright automatically adapts its appearance to match your Windows version and
 
 | Version | Date | Notes | Download |
 |---|---|---|---|
+| **1.2.2** | Oct 2026 | Self-contained (bundled .NET runtime), native Windows startup task, Microsoft Store release | [Download (.exe)](https://github.com/SN7k/LiteBright/releases/download/v1.2.2/LiteBright-Setup-1.2.2.exe) |
 | **1.2.1** | Oct 2026 | Self-contained (bundled .NET runtime), native Windows startup task, Microsoft Store release | [Download (.exe)](https://github.com/SN7k/LiteBright/releases/download/v1.2.1/LiteBright-Setup-1.2.1.exe) |
 | **1.2.0** | Oct 2026 | Windows 11 Fluent context menu, in-window dropdowns, 35+ languages, DDC/CI telemetry | [Download (.exe)](https://github.com/SN7k/LiteBright/releases/download/v1.2.0/LiteBright-Setup-1.2.0.exe) |
 | **1.0.0** | Feb 2026 | Initial release | [Download (.exe)](https://github.com/SN7k/LiteBright/releases/download/v1.0.0/LiteBright-Setup-1.0.0.exe) |
